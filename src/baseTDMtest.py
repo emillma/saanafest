@@ -27,6 +27,7 @@ plt.show(block=False)
 
 
 def callback(indata, outdata, _frames, _time, _status):
+    print(np.var(indata))
     outdata[:] = signal+np.random.random(signal.shape)*0
     indata_storage[:] = indata
 
