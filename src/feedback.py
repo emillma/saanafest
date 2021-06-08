@@ -4,6 +4,7 @@ from correlation import get_patterns
 import numpy as np
 from correlation import get_patterns, forward_match
 from utils import first_order_gain
+from scipy.interpolate import interp1d
 
 
 class Feeder:
@@ -18,12 +19,17 @@ class Feeder:
                                      bsize, fs)
         # self.gain = np.ones(self.tape_length)
 
-    def step(self, block, alpha=0.01):
+    def step(self, block, alpha=0.01, fixed_len=None):
         self.tape = np.pad(self.tape, ((0, self.bsize), (0, 0)))[self.bsize:]
         block = block.astype(np.float32)
         patterns, lengths = get_patterns(block, 100, 500, 4)
         for channel in range(block.shape[1]):
             pattern = patterns[:lengths[channel], channel]
+            if fixed_len is not None:
+                iterp = interp1d(np.linspace(0, 1, pattern.shape[0]), pattern)
+                pattern = iterp(np.linspace(0, 1, fixed_len))
+                pattern = pattern.astype(np.float32)
+
             shift = forward_match(
                 self.tape[:pattern.shape[0]*2, channel], pattern,
                 0, block.shape[0], 4)
