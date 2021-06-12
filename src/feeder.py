@@ -1,7 +1,6 @@
 from scipy.io import wavfile
 import numpy as np
 from correlation import get_patterns, forward_match
-from utils import first_order_gain
 from scipy.interpolate import interp1d
 
 
@@ -17,19 +16,27 @@ class Feeder:
         self.gain_pattern = np.ones(self.tape.shape[0])
         self.gain_pattern[:self.bsize] *= np.linspace(0, 1, self.bsize)
 
-    def step(self, block, alpha=0.01, fixed_len=None):
+    def step(self, block, alpha=0.01, fixed_lengts=None):
         self.tape = np.pad(self.tape, ((0, self.bsize), (0, 0)))[self.bsize:]
         block = block.astype(np.float32)
-        patterns, lengths = get_patterns(block, 100, 500, 4)
+        patterns, lengths = get_patterns(block, 100, 1000, 4)
         for channel in range(block.shape[1]):
-            pattern = patterns[:lengths[channel], channel]
-            if fixed_len is not None:
-                iterp = interp1d(np.linspace(0, 1, pattern.shape[0]), pattern)
-                pattern = iterp(np.linspace(0, 1, fixed_len))
+            patten_len = lengths[channel]
+            pattern = patterns[:patten_len, channel]
+            if fixed_lengts is not None:
+                fl = fixed_lengts[channel]
+                if isinstance(fl, np.ndarray):
+                    fl_closest = fl[np.argmin(
+                        np.abs(np.log2(fl)-np.log2(patten_len)))]
+                else:
+                    fl_closest = fl
+                iterp = interp1d(np.linspace(0, 1, patten_len), pattern,
+                                 assume_sorted=True)
+                pattern = iterp(np.linspace(0, 1, fl_closest))
                 pattern = pattern.astype(np.float32)
 
             shift = forward_match(
-                self.tape[:pattern.shape[0]*2, channel], pattern,
+                self.tape[:patten_len*2, channel], pattern,
                 0, block.shape[0], 4)
 
             tiled = np.tile(pattern,

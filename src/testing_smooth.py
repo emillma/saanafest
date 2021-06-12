@@ -1,7 +1,7 @@
 import sounddevice as sd
 import numpy as np
 from feeder import Feeder
-from ftbridge import FtBridge
+from fightertwister import FtBro
 import time
 from soundslot import SoundSlot
 
@@ -33,7 +33,7 @@ class Bro:
         self.node_channels_out = 1
 
         self.feeder = Feeder(self.node_channels_out, self.bsize)
-        self.ft = FtBridge()
+        self.ft = FtBro()
 
         self.mic_slot = SoundSlot(
             np.zeros((self.bsize, self.mic_channels_in), np.float32))
@@ -41,6 +41,11 @@ class Bro:
         self.moniotors = self.ft.encoders[1]
         self.moniotors.set_follow_value(0)
 
+        def foo():
+            print(self.current_tones)
+            self.ft.do_task_delay(500, foo)
+
+        self.foo = foo
         self.sd_stream_mic = sd.InputStream(
             samplerate=self.fs,
             blocksize=self.bsize,
@@ -60,22 +65,38 @@ class Bro:
             dtype=np.float32,
             latency='low',
             callback=self.cb_node)
-        self.fixed_len = 400
+
+        self.valid_tones = self.node_channels_in*[
+            np.ravel(np.array([[60, 90]]).T*np.arange(1, 10, 2))]
+        self.current_tones = [i[0] for i in self.valid_tones]
+        self.shift_rate = 10
+
+        self.feeder.step(
+            np.random.random((self.bsize, self.node_channels_in)),
+            0.01,
+            self.current_tones
+        )
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
         self.show_input_volue(indata)
         if np.amax(indata) < 0.01:
-            alpha = 0.0001
+            alpha = 0.001
         else:
             alpha = 0.01
 
         self.fixed_len = 300
 
-        sound = self.feeder.step(indata, alpha=alpha)
+        for i in range(len(self.current_tones)):
+            if np.random.random() < 1/(self.shift_rate*self.fs/self.bsize):
+                self.current_tones[i] = np.random.choice(self.valid_tones[i])
 
-        sound = sound * self.ft.main_volume.value * 10
-        outdata[:] = sound + 0
+        sound = self.feeder.step(indata, alpha, self.current_tones)
+
+        gain = (10 * self.ft.nodes.value.ravel()[None, :sound.shape[1]]
+                * self.ft.main_volume.value).astype(np.float32)
+        sound *= gain
+        outdata[:] = sound
 
         self.show_output_volue(outdata)
 
@@ -93,6 +114,7 @@ class Bro:
 
     def run(self):
         with self.ft, self.sd_stream_nodes, self.sd_stream_mic:
+            self.ft.do_task_delay(500, self.foo)
             input('enter to quit')
 
 

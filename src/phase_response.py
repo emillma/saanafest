@@ -73,3 +73,12 @@ for i in range(3):
 
     plt.plot(freqs, 10*np.log10(np.amax(spec, axis=1)))
 plt.show()
+
+# plt.close('all')
+# t = np.arange(0, 100, 1/48000)
+# signal.chirp(np.arange(10000), 0.01, 10000, 0.1),
+# s = signal.chirp(t, 50, 100, 1000, 'logarithmic', -90).astype(np.float32)
+# s1 = s[:-1000]
+# s2 = s[1000:]
+# print(forward_match(s1, s2, 1, 2000, 4))
+# plt.plot(np.abs(signal.hilbert(s))[::1000])
