@@ -1,7 +1,7 @@
 import sounddevice as sd
 import numpy as np
-from feedback import Feeder
-from fightertwister import FtBro
+from feeder import Feeder
+from ftbridge import FtBridge
 import time
 
 audiobox_in = 'Microphone (AudioBox 44 VSL ), MME'
@@ -15,18 +15,20 @@ class Bro:
     def __init__(self):
         self.fs = 48000
         self.bsize = 2048
+        self.device_in = None
+        self.device_out = None
         self.channels_out = 1
         self.channels_in = 1
         self.feeder = Feeder(self.channels_out, self.bsize)
+        self.ft = FtBridge()
 
-        self.ft = FtBro()
         self.moniotors = self.ft.encoders[1]
         self.moniotors.set_follow_value(0)
 
         self.sd_stream = sd.Stream(samplerate=self.fs,
                                    blocksize=self.bsize,
-                                   device=(yeti_in,
-                                           sonywh_out),
+                                   device=(self.device_in,
+                                           self.device_out),
                                    channels=(self.channels_in,
                                              self.channels_out),
                                    dtype=np.float32,
@@ -42,7 +44,7 @@ class Bro:
         else:
             alpha = 0.01
 
-        self.fixed_len = 500
+        self.fixed_len = 300
 
         sound = self.feeder.step(indata, alpha=alpha, fixed_len=self.fixed_len)
 
