@@ -1,4 +1,8 @@
 import numpy as np
+import sys
+if 1:
+    sys.path.insert(0,
+                    'C:/Users/emilm/Documents/fightertwister/src')
 from ftbrobackend import FtBroBackend
 from fightertwister import to_range, Encoder, ft_colors
 
@@ -48,5 +52,4 @@ class FtBro(FtBroBackend):
     def get_sine(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[1, 3]
         mode = enc.get_property('mode') * (enc.get_property('sigshape') + 1)
-        print(mode)
         return [mode, enc.value]

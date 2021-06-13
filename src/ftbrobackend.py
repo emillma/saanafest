@@ -15,9 +15,10 @@ class FtBroBackend(FighterTwister):
         for node in self.selectors:
             params = EncoderCollection((2, 4), self)
             params.set_color(ft_colors.green)
+            params.set_property('copy_mode', False)
             node.set_property('params', params)
-            if node in self.nodes:
-                params.register_cb_encoder(self.param_change)
+            # if node in self.nodes:
+            #     params.register_cb_encoder(self.param_change)
 
         self.nodes.set_default_color(ft_colors.blue)
 
@@ -70,7 +71,6 @@ class FtBroBackend(FighterTwister):
         node.set_color(self.color_node_selected)
         self.encoder_slots[0, 2:] = node.get_property('params')
         self.selected_node = node
-        self.active_nodes = EncoderCollection([])
 
     def node_hold(self, node: Encoder, _ts):
         self.selectors.set_color(
@@ -78,35 +78,31 @@ class FtBroBackend(FighterTwister):
         self.selected_node = node
         self.selected_node.set_color(self.color_node_selected)
         self.encoder_slots[0, 2:] = node.get_property('params')
-        self.active_nodes = EncoderCollection(self.selected_node)
 
     def node_togle_copy_mode(self, node: Encoder, ts):
         if node is not self.selected_node and self.button_copy.pressed:
-            if node not in self.active_nodes:
-                self.active_nodes = EncoderCollection(
-                    [*self.active_nodes, node])
+            if not node.get_property('copy_mode'):
+                node.set_property('copy_mode', True)
                 node.set_color(self.color_copy)
-                node.get_property('params').set_value(
-                    self.selected_node.get_property('params').value)
+                node.set_property('params',
+                                  self.selected_node.get_property('params'))
             else:
-                self.active_nodes = EncoderCollection(
-                    [enc for enc in self.active_nodes if enc is not node])
+                node.set_property('copy_mode', False)
                 node.set_color(node.default_color)
+                node.set_property('params',
+                                  node.get_property('params').copy())
 
     def enable_all_copy(self, button: Button, ts):
-        if self.selected_node not in self.nodes:
-            return
-        self.active_nodes = self.nodes
-        for node in filter(lambda node: node is not self.selected_node,
-                           self.active_nodes):
+        for node in [n for n in self.nodes if n is not self.selected_node]:
             node.set_color(self.color_copy)
-            node.get_property('params').set_value(
-                self.selected_node.get_property('params').value)
+            node.set_property('params',
+                              self.selected_node.get_property('params'))
 
     def disable_all_copy(self, button: Button, ts):
-        [node.set_color(node.default_color)
-         for node in self.active_nodes if node is not self.selected_node]
-        self.active_nodes = EncoderCollection(self.selected_node)
+        for node in [n for n in self.nodes if n is not self.selected_node]:
+            node.set_color(node.default_color)
+            node.set_property('params',
+                              node.get_property('params').copy())
 
     def toggle_onoff(self, node: Encoder, ts):
         if not self.button_copy.pressed:
@@ -119,3 +115,9 @@ class FtBroBackend(FighterTwister):
     def get_node_values(self, i):
         node = self.nodes[np.unravel_index(i, self.nodes.shape)]
         return node.value, node.get_property('params').value
+
+
+if __name__ == '__main__':
+    ft = FtBroBackend()
+    with ft:
+        input('press enter to quit')
