@@ -4,7 +4,7 @@ from feeder import Feeder
 from fightertwister import FtBro
 import time
 from soundslot import SoundSlot
-
+from scipy import signal
 
 audiobox_in = 'Microphone (AudioBox 44 VSL ), MME'
 audiobox_out = 'Speakers (AudioBox 44 VSL ), MME'
@@ -41,19 +41,24 @@ class Bro:
         self.moniotors = self.ft.encoders[1]
         self.moniotors.set_follow_value(0)
 
+        self.filter = signal.butter(3, (50, 150), 'bandpass', fs=self.fs)
+        self.zi = np.stack([signal.lfilter_zi(*self.filter)], axis=-1)
+
+        self.start_time = time.time()
+
         def foo():
             print(self.current_tones)
             self.ft.do_task_delay(500, foo)
 
         self.foo = foo
-        self.sd_stream_mic = sd.InputStream(
-            samplerate=self.fs,
-            blocksize=self.bsize,
-            device=self.mic_device_in,
-            channels=self.mic_channels_in,
-            dtype=np.float32,
-            latency='low',
-            callback=self.cb_mic)
+        # self.sd_stream_mic = sd.InputStream(
+        #     samplerate=self.fs,
+        #     blocksize=self.bsize,
+        #     device=self.mic_device_in,
+        #     channels=self.mic_channels_in,
+        #     dtype=np.float32,
+        #     latency='low',
+        #     callback=self.cb_mic)
 
         self.sd_stream_nodes = sd.Stream(
             samplerate=self.fs,
@@ -71,14 +76,25 @@ class Bro:
         self.current_tones = [i[0] for i in self.valid_tones]
         self.shift_rate = 10
 
-        self.feeder.step(
-            np.random.random((self.bsize, self.node_channels_in)),
-            0.01,
-            self.current_tones
+        self.cb_node(
+            np.empty((self.bsize, self.node_channels_in), np.float32),
+            np.empty((self.bsize, self.node_channels_out), np.float32),
+            None,
+            None,
+            None
         )
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
+        for channel in range(self.node_channels_in):
+            low = self.ft.get_node_values(channel)[1][0, 0]
+            high = self.ft.get_node_values(channel)[1][1, 0]
+            low = 20 + np.exp(low*np.log(10000))
+            high = max(low+100, 20 + np.exp(high*np.log(10000)))
+            indata, self.zi[:] = signal.lfilter(
+                *signal.butter(3, (low, high), 'bandpass', fs=self.fs),
+                indata,
+                axis=0, zi=self.zi)
         self.show_input_volue(indata)
         if np.amax(indata) < 0.01:
             alpha = 0.001
@@ -96,7 +112,7 @@ class Bro:
         gain = (10 * self.ft.nodes.value.ravel()[None, :sound.shape[1]]
                 * self.ft.main_volume.value).astype(np.float32)
         sound *= gain
-        outdata[:] = sound
+        outdata[:] = indata
 
         self.show_output_volue(outdata)
 
@@ -113,7 +129,7 @@ class Bro:
         outputs[:outdata.shape[1]]._show_value(np.amax(outdata, axis=0))
 
     def run(self):
-        with self.ft, self.sd_stream_nodes, self.sd_stream_mic:
+        with self.ft, self.sd_stream_nodes:
             self.ft.do_task_delay(500, self.foo)
             input('enter to quit')
 
