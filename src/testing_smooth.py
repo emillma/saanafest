@@ -1,7 +1,7 @@
 import sounddevice as sd
 import numpy as np
 from feeder import Feeder
-from fightertwister import FtBro
+from ftbro import FtBro, to_range
 import time
 from soundslot import SoundSlot
 from scipy import signal
@@ -49,8 +49,11 @@ class Bro:
         def foo():
             print(self.current_tones)
             self.ft.do_task_delay(500, foo)
-
         self.foo = foo
+
+        for node in self.ft.nodes:
+            params = node.get_property('params')
+            params[1, 0].set_value(1)
         # self.sd_stream_mic = sd.InputStream(
         #     samplerate=self.fs,
         #     blocksize=self.bsize,
@@ -72,10 +75,10 @@ class Bro:
             callback=self.cb_node)
 
         self.valid_tones = self.node_channels_in*[
-            np.ravel(np.array([[60, 90]]).T*np.arange(1, 10, 2))]
+            np.sort(np.ravel(np.array([[60, 90]]).T*np.arange(1, 10, 2)))]
         self.current_tones = [i[0] for i in self.valid_tones]
-        self.shift_rate = 10
-
+        self.shift_rate = 1
+        self.sine_times = np.zeros(self.node_channels_out)
         self.cb_node(
             np.empty((self.bsize, self.node_channels_in), np.float32),
             np.empty((self.bsize, self.node_channels_out), np.float32),
@@ -96,23 +99,42 @@ class Bro:
                 indata,
                 axis=0, zi=self.zi)
         self.show_input_volue(indata)
+
         if np.amax(indata) < 0.01:
             alpha = 0.001
         else:
             alpha = 0.01
 
-        self.fixed_len = 300
-
-        for i in range(len(self.current_tones)):
-            if np.random.random() < 1/(self.shift_rate*self.fs/self.bsize):
-                self.current_tones[i] = np.random.choice(self.valid_tones[i])
+        for i in range(self.node_channels_out):
+            mode, value = self.ft.get_shift_rate(i)
+            if mode == 0:
+                rate = to_range(value, 0.1, 10)
+                if np.random.random() < 1/(rate*self.fs/self.bsize):
+                    self.current_tones[i] = np.random.choice(
+                        self.valid_tones[i])
+            else:
+                self.current_tones[i] = self.valid_tones[i][
+                    round(to_range(value, 0, len(self.valid_tones[i])-1))]
 
         sound = self.feeder.step(indata, alpha, self.current_tones)
+        sound *= 10
+        for i in range(self.node_channels_out):
+            mode, value = self.ft.get_sine(i)
+            freq = 50+np.exp(value*np.log(9950))
+            if mode == 0:
+                continue
+            else:
+                end_time = (self.bsize/self.fs) * 2*np.pi*freq
+                t = np.linspace(0, end_time, self.bsize) + self.sine_times[i]
+                generator = [np.sin, signal.sawtooth, signal.square][mode-1]
+                sine = generator(t)
+                self.sine_times[i] += end_time * (self.bsize+1)/self.bsize
+                sound[:, i] = sine
 
-        gain = (10 * self.ft.nodes.value.ravel()[None, :sound.shape[1]]
+        gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
                 * self.ft.main_volume.value).astype(np.float32)
         sound *= gain
-        outdata[:] = indata
+        outdata[:] = sound
 
         self.show_output_volue(outdata)
 
