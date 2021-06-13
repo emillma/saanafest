@@ -84,25 +84,25 @@ class FtBroBackend(FighterTwister):
             if not node.get_property('copy_mode'):
                 node.set_property('copy_mode', True)
                 node.set_color(self.color_copy)
-                node.set_property('params',
-                                  self.selected_node.get_property('params'))
+                node.set_property('params', EncoderCollection(
+                                  self.selected_node.get_property('params')))
             else:
                 node.set_property('copy_mode', False)
                 node.set_color(node.default_color)
-                node.set_property('params',
-                                  node.get_property('params').copy())
+                node.set_property('params', EncoderCollection(
+                                  node.get_property('params').copy()))
 
     def enable_all_copy(self, button: Button, ts):
         for node in [n for n in self.nodes if n is not self.selected_node]:
             node.set_color(self.color_copy)
-            node.set_property('params',
-                              self.selected_node.get_property('params'))
+            node.set_property('params', EncoderCollection(
+                              self.selected_node.get_property('params')))
 
     def disable_all_copy(self, button: Button, ts):
         for node in [n for n in self.nodes if n is not self.selected_node]:
             node.set_color(node.default_color)
-            node.set_property('params',
-                              node.get_property('params').copy())
+            node.set_property('params', EncoderCollection(
+                              node.get_property('params').copy()))
 
     def toggle_onoff(self, node: Encoder, ts):
         if not self.button_copy.pressed:
@@ -111,10 +111,6 @@ class FtBroBackend(FighterTwister):
     def toggle_solo(self, node: Encoder, ts):
         node.set_on_off(1)
         [i.set_on_off(0) for i in self.nodes if i is not node]
-
-    def get_node_values(self, i):
-        node = self.nodes[np.unravel_index(i, self.nodes.shape)]
-        return node.value, node.get_property('params').value
 
 
 if __name__ == '__main__':

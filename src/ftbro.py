@@ -1,8 +1,5 @@
 import numpy as np
 import sys
-if 1:
-    sys.path.insert(0,
-                    'C:/Users/emilm/Documents/fightertwister/src')
 from ftbrobackend import FtBroBackend
 from fightertwister import to_range, Encoder, ft_colors
 
@@ -45,6 +42,10 @@ class FtBro(FtBroBackend):
             params[1, 3].set_property('mode', 0)
             params[1, 3].set_property('sigshape', 0)
 
+    def __enter__(self):
+        super().__enter__()
+        self.do_task_delay(100, self.foo)
+
     def get_shift_rate(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[0, 3]
         return [enc.get_property('mode'), enc.value]
@@ -53,3 +54,17 @@ class FtBro(FtBroBackend):
         enc = self.nodes.ravel()[node_idx].get_property('params')[1, 3]
         mode = enc.get_property('mode') * (enc.get_property('sigshape') + 1)
         return [mode, enc.value]
+
+    def get_node_values(self, i):
+        node = self.nodes[np.unravel_index(i, self.nodes.shape)]
+        return node.value, node.get_property('params').value
+
+    def foo(self):
+        self.get_node_values(0)
+        self.do_task_delay(100, self.foo)
+
+
+if __name__ == '__main__':
+    ft = FtBro()
+    with ft:
+        input('press enter to quit')
