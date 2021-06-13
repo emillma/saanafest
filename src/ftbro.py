@@ -58,8 +58,25 @@ class FtBro(FtBroBackend):
         node = self.nodes[np.unravel_index(i, self.nodes.shape)]
         return node.value, node.get_property('params').value
 
+    def save(self):
+        save_dict = {}
+        for i, selector in enumerate(self.selectors.ravel()):
+            selector_dir = {}
+            for key in selector._setable_propery_keys:
+                selector_dir[key] = getattr(selector, key)
+
+            for j, param in enumerate(selector.get_property('params')):
+                param_dir = {}
+                for key in param._setable_propery_keys:
+                    param_dir[key] = getattr(param, key)
+
+                selector_dir[f'param{j:02d}'] = param_dir
+            save_dict[f'selector{i:02d}'] = selector_dir
+        pass
+
 
 if __name__ == '__main__':
     ft = FtBro()
     with ft:
+        ft.save()
         input('press enter to quit')

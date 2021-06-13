@@ -17,8 +17,6 @@ class FtBroBackend(FighterTwister):
             params.set_color(ft_colors.green)
             params.set_property('copy_mode', False)
             selector.set_property('params', params)
-            # if node in self.nodes:
-            #     params.register_cb_encoder(self.param_change)
 
         self.nodes.set_default_color(ft_colors.blue)
 
@@ -107,10 +105,6 @@ class FtBroBackend(FighterTwister):
     def toggle_solo(self, node: Encoder, ts):
         node.set_on_off(1)
         [i.set_on_off(0) for i in self.nodes if i is not node]
-
-    # def save(self, filename):
-    #     savedict = {}
-    #     for
 
 
 if __name__ == '__main__':
