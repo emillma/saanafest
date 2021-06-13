@@ -44,7 +44,6 @@ class FtBro(FtBroBackend):
 
     def __enter__(self):
         super().__enter__()
-        self.do_task_delay(100, self.foo)
 
     def get_shift_rate(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[0, 3]
@@ -58,10 +57,6 @@ class FtBro(FtBroBackend):
     def get_node_values(self, i):
         node = self.nodes[np.unravel_index(i, self.nodes.shape)]
         return node.value, node.get_property('params').value
-
-    def foo(self):
-        self.get_node_values(0)
-        self.do_task_delay(100, self.foo)
 
 
 if __name__ == '__main__':

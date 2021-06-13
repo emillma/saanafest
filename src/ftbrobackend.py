@@ -12,11 +12,11 @@ class FtBroBackend(FighterTwister):
         self.main_volume = self.selectors[0, 3]
         self.mic = self.selectors[1, 3]
 
-        for node in self.selectors:
+        for selector in self.selectors:
             params = EncoderCollection((2, 4), self)
             params.set_color(ft_colors.green)
             params.set_property('copy_mode', False)
-            node.set_property('params', params)
+            selector.set_property('params', params)
             # if node in self.nodes:
             #     params.register_cb_encoder(self.param_change)
 
@@ -37,7 +37,6 @@ class FtBroBackend(FighterTwister):
 
         self.selected_node = self.selectors[0, 0]
         self.encoder_slots[0, 2:] = self.selected_node.get_property('params')
-        self.active_nodes = EncoderCollection(self.selected_node)
 
         self.nodes.register_cb_hold(self.node_hold)
         self.selectors.register_cb_click(self.toggle_onoff)
@@ -59,12 +58,6 @@ class FtBroBackend(FighterTwister):
         self.selectors.set_color(self.selectors.default_color)
         self.selected_node.set_color(self.color_node_selected)
 
-    def param_change(self, _node: Encoder, _ts):
-        for node in filter(lambda node: node is not self.selected_node,
-                           self.active_nodes):
-            node.get_property('params').set_value(
-                self.selected_node.get_property('params').value)
-
     def volume_or_mic_hold(self, node: Encoder, _ts):
         self.selectors.set_color(
             self.selectors.default_color)
@@ -73,6 +66,7 @@ class FtBroBackend(FighterTwister):
         self.selected_node = node
 
     def node_hold(self, node: Encoder, _ts):
+        self.disable_all_copy(None, None)
         self.selectors.set_color(
             self.selectors.default_color)
         self.selected_node = node
@@ -94,12 +88,14 @@ class FtBroBackend(FighterTwister):
 
     def enable_all_copy(self, button: Button, ts):
         for node in [n for n in self.nodes if n is not self.selected_node]:
+            node.set_property('copy_mode', True)
             node.set_color(self.color_copy)
             node.set_property('params', EncoderCollection(
                               self.selected_node.get_property('params')))
 
     def disable_all_copy(self, button: Button, ts):
         for node in [n for n in self.nodes if n is not self.selected_node]:
+            node.set_property('copy_mode', False)
             node.set_color(node.default_color)
             node.set_property('params', EncoderCollection(
                               node.get_property('params').copy()))
@@ -111,6 +107,10 @@ class FtBroBackend(FighterTwister):
     def toggle_solo(self, node: Encoder, ts):
         node.set_on_off(1)
         [i.set_on_off(0) for i in self.nodes if i is not node]
+
+    # def save(self, filename):
+    #     savedict = {}
+    #     for
 
 
 if __name__ == '__main__':
