@@ -30,6 +30,7 @@ class Feeder:
                         np.abs(np.log2(fl)-np.log2(patten_len)))]
                 else:
                     fl_closest = fl
+                # TODO if closer than threashold, dont shift
                 iterp = interp1d(np.linspace(0, 1, patten_len), pattern,
                                  assume_sorted=True)
                 pattern = iterp(np.linspace(0, 1, fl_closest))
