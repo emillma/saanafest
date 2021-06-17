@@ -32,7 +32,7 @@ def callback(indata, outdata, _frames, _time, _status):
     indata_storage[:] = indata
 
 
-sd_stream = sd.Stream(samplerate=48000,
+sd_stream = sd.Stream(samplerate=44100,
                       blocksize=2048,
                       device=(input_device,
                               output_device),
