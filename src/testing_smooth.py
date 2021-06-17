@@ -1,6 +1,7 @@
 import sounddevice as sd
 import numpy as np
 from feeder import Feeder
+from fightertwister.src.fightertwister.utils import ft_colors
 from ftbro import FtBro, to_range
 import time
 from soundslot import SoundSlot
@@ -22,7 +23,7 @@ sonywh_out = 'Headphones (WH-1000XM2 Stereo), MME'
 
 class Bro:
     def __init__(self):
-        self.fs = 48000
+        self.fs = 44100
         self.bsize = 2048
         self.mic_device_in = mch_in
         self.mic_channels_in = 1
@@ -47,8 +48,9 @@ class Bro:
         self.start_time = time.time()
 
         def foo():
-            print(self.current_tones)
-            self.ft.do_task_delay(500, foo)
+            print((self.tlog[-1][1]-self.tlog[-1][0])/(self.bsize/self.fs))
+            self.ft.save()
+            self.ft.do_task_delay(1000, foo)
         self.foo = foo
 
         for node in self.ft.nodes:
@@ -79,6 +81,8 @@ class Bro:
         self.current_tones = [i[0] for i in self.valid_tones]
         self.shift_rate = 1
         self.sine_times = np.zeros(self.node_channels_out)
+
+        self.tlog = [[time.time(), time.time()]*2]
         self.cb_node(
             np.empty((self.bsize, self.node_channels_in), np.float32),
             np.empty((self.bsize, self.node_channels_out), np.float32),
@@ -105,31 +109,11 @@ class Bro:
         else:
             alpha = 0.01
 
-        for i in range(self.node_channels_out):
-            mode, value = self.ft.get_shift_rate(i)
-            if mode == 0:
-                rate = to_range(value, 0.1, 10)
-                if np.random.random() < 1/(rate*self.fs/self.bsize):
-                    self.current_tones[i] = np.random.choice(
-                        self.valid_tones[i])
-            else:
-                self.current_tones[i] = self.valid_tones[i][
-                    round(to_range(value, 0, len(self.valid_tones[i])-1))]
+        current_tones = self.get_current_tones()
 
-        sound = self.feeder.step(indata, alpha, self.current_tones)
+        sound = self.feeder.step(indata, alpha, current_tones)
         sound *= 10
-        for i in range(self.node_channels_out):
-            mode, value = self.ft.get_sine(i)
-            freq = 50+np.exp(value*np.log(9950))
-            if mode == 0:
-                continue
-            else:
-                end_time = (self.bsize/self.fs) * 2*np.pi*freq
-                t = np.linspace(0, end_time, self.bsize) + self.sine_times[i]
-                generator = [np.sin, signal.sawtooth, signal.square][mode-1]
-                sine = generator(t)
-                self.sine_times[i] += end_time * (self.bsize+1)/self.bsize
-                sound[:, i] = sine
+        sound = self.handle_controlled_sine(sound)
 
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
                 * self.ft.main_volume.value).astype(np.float32)
@@ -137,6 +121,39 @@ class Bro:
         outdata[:] = sound
 
         self.show_output_volue(outdata)
+        self.tlog.append([t0, time.time()])
+        self.tlog.pop(0)
+
+    def get_current_tones(self):
+        for i in range(self.node_channels_out):
+            shift_mode, shift_value = self.ft.get_shift_rate(i)
+            if shift_mode == 0:
+                rate = to_range(shift_value, 0.1, 10)
+                if np.random.random() < 1/(rate*self.fs/self.bsize):
+                    self.current_tones[i] = np.random.choice(
+                        self.valid_tones[i])
+                    self.ft.encoder_slots[0, 2, 3].flash_color(ft_colors.blue)
+            else:
+                self.current_tones[i] = self.valid_tones[i][
+                    round(to_range(shift_value, len(self.valid_tones[i])-1, 0))]
+        return self.current_tones
+
+    def handle_controlled_sine(self, sound):
+        for i in range(self.node_channels_out):
+            shift_mode, shift_value = self.ft.get_contolled_tone(i)
+            if shift_mode == 0:
+                continue
+            else:
+                freq = 50+np.exp(shift_value*np.log(9950))
+                end_time = (self.bsize/self.fs) * 2*np.pi*freq
+                t = np.linspace(0, end_time, self.bsize) + self.sine_times[i]
+                generator = [np.sin, signal.sawtooth,
+                             signal.square][shift_mode-1]
+                signal_gain = [1, 2/3, 1 / 2][shift_mode-1]
+                sine = generator(t)*signal_gain
+                self.sine_times[i] += end_time * (self.bsize+1)/self.bsize
+                sound[:, i] = sine
+        return sound
 
     def cb_mic(self, indata, _frames, _time, _status):
         # print(indata.shape)
@@ -144,11 +161,11 @@ class Bro:
 
     def show_input_volue(self, indata):
         inputs = self.moniotors[:2, :3].ravel()
-        inputs[:indata.shape[1]]._show_value(np.amax(indata, axis=0))
+        inputs[:indata.shape[1]].show_value(np.amax(indata, axis=0))
 
     def show_output_volue(self, outdata):
         outputs = self.moniotors[2:, :3].ravel()
-        outputs[:outdata.shape[1]]._show_value(np.amax(outdata, axis=0))
+        outputs[:outdata.shape[1]].show_value(np.amax(outdata, axis=0))
 
     def run(self):
         with self.ft, self.sd_stream_nodes:

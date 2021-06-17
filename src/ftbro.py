@@ -2,24 +2,13 @@ import numpy as np
 import sys
 from ftbrobackend import FtBroBackend
 from fightertwister import to_range, Encoder, ft_colors
+import json
+from pathlib import Path
 
 
-def toggle_note_shift_mode(self: Encoder, ts):
-    self.set_property('mode',
-                      self.get_property('mode') ^ 1)
-    if self.get_property('mode'):
-        self.set_color(ft_colors.red)
-    else:
-        self.set_color(ft_colors.green)
-
-
-def toggle_response_mode(self: Encoder, ts):
-    self.set_property('mode',
-                      self.get_property('mode') ^ 1)
-    if self.get_property('mode'):
-        self.set_color(ft_colors.red)
-    else:
-        self.set_color(ft_colors.green)
+def toggle_state(self: Encoder, ts):
+    self.set_state(self._state ^ 1)
+    self.set_color(ft_colors.red if self._state else self._default_color)
 
 
 def toggle_signal_shape(self: Encoder, ts):
@@ -34,45 +23,70 @@ class FtBro(FtBroBackend):
         for node in self.nodes:
             params = node.get_property('params')
 
-            params[0, 3].register_cb_press(toggle_note_shift_mode)
+            params[0, 3].register_cb_press(toggle_state)
+
             params[0, 3].set_property('mode', 0)
 
-            params[1, 3].register_cb_hold(toggle_note_shift_mode)
+            params[1, 3].register_cb_hold(toggle_state)
             params[1, 3].register_cb_click(toggle_signal_shape)
             params[1, 3].set_property('mode', 0)
             params[1, 3].set_property('sigshape', 0)
-
-    def __enter__(self):
-        super().__enter__()
+        self.load()
 
     def get_shift_rate(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[0, 3]
-        return [enc.get_property('mode'), enc.value]
+        return [enc._state, enc.value]
 
-    def get_sine(self, node_idx):
+    def get_contolled_tone(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[1, 3]
-        mode = enc.get_property('mode') * (enc.get_property('sigshape') + 1)
+        mode = enc._state * (enc.get_property('sigshape') + 1)
         return [mode, enc.value]
 
     def get_node_values(self, i):
         node = self.nodes[np.unravel_index(i, self.nodes.shape)]
         return node.value, node.get_property('params').value
 
-    def save(self):
-        save_dict = {}
+    def save(self, file_name=None):
+        state_dict = {}
         for i, selector in enumerate(self.selectors.ravel()):
             selector_dir = {}
             for key in selector._setable_propery_keys:
+                # if type(getattr(selector, key)) not in [int, float, bool]:
                 selector_dir[key] = getattr(selector, key)
 
             for j, param in enumerate(selector.get_property('params')):
                 param_dir = {}
                 for key in param._setable_propery_keys:
+                    # if type(getattr(param, key)) not in [int, float, bool]:
                     param_dir[key] = getattr(param, key)
 
                 selector_dir[f'param{j:02d}'] = param_dir
-            save_dict[f'selector{i:02d}'] = selector_dir
-        pass
+            state_dict[f'selector{i:02d}'] = selector_dir
+
+        fname = file_name or Path(__file__).parents[1].joinpath('state.json')
+        with open(fname, 'w') as file:
+            json.dump(state_dict, file)
+
+    def load(self, file_name=None):
+        file = (Path(file_name) if file_name
+                else Path(__file__).parents[1].joinpath('state.json'))
+        if not file.is_file():
+            return
+        with open(file, 'r') as file:
+            state_dict = json.load(file)
+        selectors = self.selectors.ravel()
+        for selector, selector_dir in state_dict.items():
+            selector = selectors[int(selector[-2:])]
+            params = selector.get_property('params').ravel()
+
+            for key, value in selector_dir.items():
+                if not key.startswith('param'):
+                    getattr(selector, f'set{key}')(value)
+                else:
+                    param = params[int(key[-2:])]
+                    param_dir = value
+                    for key, value in param_dir.items():
+                        getattr(param, f'set{key}')(value)
 
 
 if __name__ == '__main__':
