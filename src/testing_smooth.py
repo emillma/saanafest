@@ -47,11 +47,11 @@ class Bro:
 
         self.start_time = time.time()
 
-        def foo():
+        def repeat_foo():
             print((self.tlog[-1][1]-self.tlog[-1][0])/(self.bsize/self.fs))
             self.ft.save()
-            self.ft.do_task_delay(1000, foo)
-        self.foo = foo
+            self.ft.do_task_delay(1000, repeat_foo)
+        self.repeat_foo = repeat_foo
 
         for node in self.ft.nodes:
             params = node.get_property('params')
@@ -169,7 +169,7 @@ class Bro:
 
     def run(self):
         with self.ft, self.sd_stream_nodes:
-            self.ft.do_task_delay(500, self.foo)
+            self.ft.do_task_delay(5000, self.repeat_foo)
             input('enter to quit')
 
 

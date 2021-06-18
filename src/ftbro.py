@@ -4,6 +4,7 @@ from ftbrobackend import FtBroBackend
 from fightertwister import to_range, Encoder, ft_colors
 import json
 from pathlib import Path
+import time
 
 
 def toggle_state(self: Encoder, ts):
@@ -21,6 +22,7 @@ class FtBro(FtBroBackend):
     def __init__(self):
         super().__init__()
         for node in self.nodes:
+
             params = node.get_property('params')
 
             params[0, 3].register_cb_press(toggle_state)
@@ -32,6 +34,7 @@ class FtBro(FtBroBackend):
             params[1, 3].set_property('mode', 0)
             params[1, 3].set_property('sigshape', 0)
         self.load()
+        time.sleep(0.5)
 
     def get_shift_rate(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[0, 3]
@@ -58,6 +61,8 @@ class FtBro(FtBroBackend):
                 param_dir = {}
                 for key in param._setable_propery_keys:
                     # if type(getattr(param, key)) not in [int, float, bool]:
+                    if key == '_color' and getattr(param, key) == ft_colors.red:
+                        a = 1
                     param_dir[key] = getattr(param, key)
 
                 selector_dir[f'param{j:02d}'] = param_dir
@@ -86,6 +91,8 @@ class FtBro(FtBroBackend):
                     param = params[int(key[-2:])]
                     param_dir = value
                     for key, value in param_dir.items():
+                        if key == '_color' and value == ft_colors.red:
+                            a = 1
                         getattr(param, f'set{key}')(value)
 
 

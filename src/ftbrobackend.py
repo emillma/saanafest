@@ -14,7 +14,7 @@ class FtBroBackend(FighterTwister):
 
         for selector in self.selectors:
             params = EncoderCollection((2, 4), self)
-            params.set_default_color(ft_colors.green)
+            params.set_default_color(ft_colors.green, True)
 
             params.set_property('copy_mode', False)
             selector.set_property('params', params)
@@ -22,13 +22,13 @@ class FtBroBackend(FighterTwister):
         self.selectors.set_value(0.3)
         self.selectors.set_color(self.selectors._default_color)
 
-        self.nodes.set_default_color(ft_colors.blue)
+        self.nodes.set_default_color(ft_colors.blue, True)
 
         self.main_volume.register_cb_hold(self.volume_or_mic_hold)
-        self.main_volume.set_default_color(ft_colors.orange)
+        self.main_volume.set_default_color(ft_colors.orange, True)
 
         self.mic.register_cb_hold(self.volume_or_mic_hold)
-        self.mic.set_default_color(ft_colors.magenta)
+        self.mic.set_default_color(ft_colors.magenta, True)
 
         self.button_params = self.sidebuttons[0:2, 0, 0]
         self.button_inspect = self.sidebuttons[0:2, 1, 0]
