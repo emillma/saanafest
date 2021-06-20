@@ -6,7 +6,7 @@ from ftbro import FtBro, to_range
 import time
 from soundslot import SoundSlot
 from scipy import signal
-
+import logging
 audiobox_in = 'Microphone (AudioBox 44 VSL ), MME'
 audiobox_out = 'Speakers (AudioBox 44 VSL ), MME'
 
@@ -29,11 +29,11 @@ class Bro:
         self.mic_channels_in = 1
 
         self.node_device_in = pc_in
-        self.node_channels_in = 1
+        self.node_n_channels_in = 1
         self.node_device_out = sonywh_out
-        self.node_channels_out = 1
+        self.node_n_channels_out = 1
 
-        self.feeder = Feeder(self.node_channels_out, self.bsize)
+        self.feeder = Feeder(self.node_n_channels_out, self.bsize)
         self.ft = FtBro()
 
         self.mic_slot = SoundSlot(
@@ -53,9 +53,6 @@ class Bro:
             self.ft.do_task_delay(1000, repeat_foo)
         self.repeat_foo = repeat_foo
 
-        for node in self.ft.nodes:
-            params = node.get_property('params')
-            params[1, 0].set_value(1)
         # self.sd_stream_mic = sd.InputStream(
         #     samplerate=self.fs,
         #     blocksize=self.bsize,
@@ -70,22 +67,22 @@ class Bro:
             blocksize=self.bsize,
             device=(self.node_device_in,
                     self.node_device_out),
-            channels=(self.node_channels_in,
-                      self.node_channels_out),
+            channels=(self.node_n_channels_in,
+                      self.node_n_channels_out),
             dtype=np.float32,
             latency='low',
             callback=self.cb_node)
 
-        self.valid_tones = self.node_channels_in*[
+        self.valid_tones = self.node_n_channels_in*[
             np.sort(np.ravel(np.array([[60, 90]]).T*np.arange(1, 10, 2)))]
         self.current_tones = [i[0] for i in self.valid_tones]
         self.shift_rate = 1
-        self.sine_times = np.zeros(self.node_channels_out)
+        self.sine_times = np.zeros(self.node_n_channels_out)
 
         self.tlog = [[time.time(), time.time()]*2]
         self.cb_node(
-            np.empty((self.bsize, self.node_channels_in), np.float32),
-            np.empty((self.bsize, self.node_channels_out), np.float32),
+            np.empty((self.bsize, self.node_n_channels_in), np.float32),
+            np.empty((self.bsize, self.node_n_channels_out), np.float32),
             None,
             None,
             None
@@ -93,15 +90,7 @@ class Bro:
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
-        for channel in range(self.node_channels_in):
-            low = self.ft.get_node_values(channel)[1][0, 0]
-            high = self.ft.get_node_values(channel)[1][1, 0]
-            low = 20 + np.exp(low*np.log(10000))
-            high = max(low+100, 20 + np.exp(high*np.log(10000)))
-            indata, self.zi[:] = signal.lfilter(
-                *signal.butter(3, (low, high), 'bandpass', fs=self.fs),
-                indata,
-                axis=0, zi=self.zi)
+
         self.show_input_volue(indata)
 
         if np.amax(indata) < 0.01:
@@ -118,6 +107,14 @@ class Bro:
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
                 * self.ft.main_volume.value).astype(np.float32)
         sound *= gain
+
+        for channel in range(self.node_n_channels_out):
+            low = self.ft.get_node_filter_low(channel)
+            high = self.ft.get_node_filter_high(channel)
+            sound, self.zi[:] = signal.lfilter(
+                *signal.butter(3, (low, high), 'bandpass', fs=self.fs),
+                sound,
+                axis=0, zi=self.zi)
         outdata[:] = sound
 
         self.show_output_volue(outdata)
@@ -125,7 +122,7 @@ class Bro:
         self.tlog.pop(0)
 
     def get_current_tones(self):
-        for i in range(self.node_channels_out):
+        for i in range(self.node_n_channels_out):
             shift_mode, shift_value = self.ft.get_shift_rate(i)
             if shift_mode == 0:
                 rate = to_range(shift_value, 0.1, 10)
@@ -139,7 +136,7 @@ class Bro:
         return self.current_tones
 
     def handle_controlled_sine(self, sound):
-        for i in range(self.node_channels_out):
+        for i in range(self.node_n_channels_out):
             shift_mode, shift_value = self.ft.get_contolled_tone(i)
             if shift_mode == 0:
                 continue
@@ -174,5 +171,6 @@ class Bro:
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     bro = Bro()
     bro.run()

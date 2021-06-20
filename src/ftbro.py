@@ -5,6 +5,7 @@ from fightertwister import to_range, Encoder, ft_colors
 import json
 from pathlib import Path
 import time
+import logging
 
 
 def toggle_state(self: Encoder, ts):
@@ -18,9 +19,20 @@ def toggle_signal_shape(self: Encoder, ts):
     print(self.get_property('sigshape'))
 
 
+def set_filter_low(self: Encoder, ts):
+    self.set_property('freq_low', 20 + np.exp(self.value*np.log(10000)))
+    logging.info(self.get_property('freq_low'))
+
+
+def set_filter_high(self: Encoder, ts):
+    self.set_property('freq_high', 20 + np.exp(self.value*np.log(10000)))
+    logging.info(self.get_property('freq_high'))
+
+
 class FtBro(FtBroBackend):
     def __init__(self):
         super().__init__()
+        self.load()
         for node in self.nodes:
 
             params = node.get_property('params')
@@ -30,10 +42,18 @@ class FtBro(FtBroBackend):
             params[0, 3].set_property('mode', 0)
 
             params[1, 3].register_cb_hold(toggle_state)
-            params[1, 3].register_cb_click(toggle_signal_shape)
             params[1, 3].set_property('mode', 0)
+            params[1, 3].register_cb_click(toggle_signal_shape)
             params[1, 3].set_property('sigshape', 0)
-        self.load()
+
+            params[0, 0].register_cb_encoder(set_filter_low)
+            params[0, 0].set_property('freq_low', 0)
+            set_filter_low(params[0, 0], None)
+
+            params[1, 0].register_cb_encoder(set_filter_high)
+            params[1, 0].set_property('freq_high', 0)
+            set_filter_high(params[0, 0], None)
+
         time.sleep(0.5)
 
     def get_shift_rate(self, node_idx):
@@ -94,6 +114,16 @@ class FtBro(FtBroBackend):
                         if key == '_color' and value == ft_colors.red:
                             a = 1
                         getattr(param, f'set{key}')(value)
+
+    def get_node_filter_low(self, node):
+        param = self.nodes.ravel()[node].get_property('params')[0, 0]
+        return param.get_property('freq_low')
+
+    def get_node_filter_high(self, node):
+        param_low = self.nodes.ravel()[node].get_property('params')[0, 0]
+        param_high = self.nodes.ravel()[node].get_property('params')[1, 0]
+        return max(param_low.get_property('freq_low')+100,
+                   param_high.get_property('freq_high'))
 
 
 if __name__ == '__main__':
