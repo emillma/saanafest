@@ -52,7 +52,7 @@ class FtBro(FtBroBackend):
 
             params[1, 0].register_cb_encoder(set_filter_high)
             params[1, 0].set_property('freq_high', 0)
-            set_filter_high(params[0, 0], None)
+            set_filter_high(params[1, 0], None)
 
         time.sleep(0.5)
 

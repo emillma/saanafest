@@ -48,7 +48,8 @@ class Bro:
         self.start_time = time.time()
 
         def repeat_foo():
-            print((self.tlog[-1][1]-self.tlog[-1][0])/(self.bsize/self.fs))
+            # print((self.tlog[-1][1]-self.tlog[-1][0])/(self.bsize/self.fs))
+            print(self.ft.get_node_filter_low(0))
             self.ft.save()
             self.ft.do_task_delay(1000, repeat_foo)
         self.repeat_foo = repeat_foo
