@@ -20,12 +20,12 @@ def toggle_signal_shape(self: Encoder, ts):
 
 
 def set_filter_low(self: Encoder, ts):
-    self.set_property('freq_low', 20 + np.exp(self.value*np.log(10000)))
+    self.set_property('freq_low', 20 + np.exp(self.value*np.log(19800)))
     logging.info(self.get_property('freq_low'))
 
 
 def set_filter_high(self: Encoder, ts):
-    self.set_property('freq_high', 20 + np.exp(self.value*np.log(10000)))
+    self.set_property('freq_high', 20 + np.exp(self.value*np.log(19800)))
     logging.info(self.get_property('freq_high'))
 
 
@@ -58,12 +58,14 @@ class FtBro(FtBroBackend):
 
     def get_shift_rate(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[0, 3]
-        return [enc._state, enc.value]
+        mean_duration = to_range(enc.value, 0.1, 20)
+        return [enc._state, mean_duration, enc.value]
 
     def get_contolled_tone(self, node_idx):
         enc = self.nodes.ravel()[node_idx].get_property('params')[1, 3]
         mode = enc._state * (enc.get_property('sigshape') + 1)
-        return [mode, enc.value]
+        tone = 50+np.exp(enc.value*np.log(9950))
+        return [mode, tone]
 
     def get_node_values(self, i):
         node = self.nodes[np.unravel_index(i, self.nodes.shape)]

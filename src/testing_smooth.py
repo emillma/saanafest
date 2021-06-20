@@ -124,30 +124,30 @@ class Bro:
 
     def get_current_tones(self):
         for i in range(self.node_n_channels_out):
-            shift_mode, shift_value = self.ft.get_shift_rate(i)
+            shift_mode, mean_duration, value = self.ft.get_shift_rate(i)
             if shift_mode == 0:
-                rate = to_range(shift_value, 0.1, 10)
-                if np.random.random() < 1/(rate*self.fs/self.bsize):
+
+                prob = 1-np.exp(-self.bsize/(self.fs*mean_duration))
+                if np.random.random() < prob:
                     self.current_tones[i] = np.random.choice(
                         self.valid_tones[i])
                     self.ft.encoder_slots[0, 2, 3].flash_color(ft_colors.blue)
             else:
                 self.current_tones[i] = self.valid_tones[i][
-                    round(to_range(shift_value, len(self.valid_tones[i])-1, 0))]
+                    round(to_range(value, len(self.valid_tones[i])-1, 0))]
         return self.current_tones
 
     def handle_controlled_sine(self, sound):
         for i in range(self.node_n_channels_out):
-            shift_mode, shift_value = self.ft.get_contolled_tone(i)
-            if shift_mode == 0:
+            sine_mode, sine_tone = self.ft.get_contolled_tone(i)
+            if sine_mode == 0:
                 continue
             else:
-                freq = 50+np.exp(shift_value*np.log(9950))
-                end_time = (self.bsize/self.fs) * 2*np.pi*freq
+                end_time = (self.bsize/self.fs) * 2*np.pi*sine_tone
                 t = np.linspace(0, end_time, self.bsize) + self.sine_times[i]
                 generator = [np.sin, signal.sawtooth,
-                             signal.square][shift_mode-1]
-                signal_gain = [1, 2/3, 1 / 2][shift_mode-1]
+                             signal.square][sine_mode-1]
+                signal_gain = [1, 2/3, 1 / 2][sine_mode-1]
                 sine = generator(t)*signal_gain
                 self.sine_times[i] += end_time * (self.bsize+1)/self.bsize
                 sound[:, i] = sine
