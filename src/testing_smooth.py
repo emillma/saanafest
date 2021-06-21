@@ -142,7 +142,9 @@ class Bro:
                 if np.random.random() < prob:
                     self.current_tones[i] = np.random.choice(
                         self.valid_pattern_len[i])
-                    self.ft.encoder_slots[0, 2, 3].flash_color(ft_colors.blue)
+                    self.ft.nodes.ravel()[i].get_property(
+                        'params')[0, 3].flash_color(ft_colors.blue)
+                    # self.ft.encoder_slots[0, 2, 3].flash_color(ft_colors.blue)
             else:
                 self.current_tones[i] = self.valid_pattern_len[i][
                     round(to_range(value, 0, len(self.valid_tones[i])-1))]
