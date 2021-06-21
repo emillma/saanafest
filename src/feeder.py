@@ -11,8 +11,9 @@ class Feeder:
         self.tape_length = (4*fs//self.bsize)*self.bsize
         self.tape = np.zeros(
             (self.tape_length, channels)).astype(np.float32)
-        self.gains = np.ones(self.tape_length//self.bsize, np.float32)
-        self.gains = np.exp(-0.01*np.arange(self.gains.size, 0, -1))
+        self.gains = np.exp(-0.01 * np.arange(self.tape_length//self.bsize,
+                                              0, -1)).astype(np.float32)
+        self.gains_repeated = np.empty(self.tape_length, np.float32)
         self.ramp = 1
 
         self.gain_ramp_up = np.linspace(0, 1, self.bsize).astype(np.float32)
@@ -25,6 +26,10 @@ class Feeder:
 
         block = block.astype(np.float32)
         patterns, lengths = get_patterns(block, 44, 1000, 8)
+
+        self.gains *= (1-alpha)
+        self.gains_repeated[:] = np.repeat(alpha/self.gains,
+                                           self.bsize)
         for channel in range(block.shape[1]):
             patten_len = lengths[channel]
             pattern = patterns[:patten_len, channel]
@@ -52,12 +57,10 @@ class Feeder:
         return self.tape[:self.bsize]
 
     def merge_in(self, shift, tiled, channel, alpha):
-        self.gains[:] *= (1-alpha)
         tiled[:self.bsize] *= self.gain_ramp_up
-        tiled[:] *= (alpha
-                     / np.repeat(self.gains, self.bsize)[:tiled.shape[0]])
+        tiled[:] *= self.gains_repeated[:tiled.shape[0]]
         self.tape[shift: shift+tiled.shape[0], channel] += tiled
-        self.tape[:self.bsize] *= self.gains[0]
+        self.tape[:self.bsize, channel] *= self.gains[0]
 
 
 if __name__ == '__main__':

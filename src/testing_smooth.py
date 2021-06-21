@@ -30,8 +30,8 @@ class Bro:
         self.mic_device_in = mch_in
         self.mic_channels_in = 1
 
-        self.node_device_in = pc_in
-        self.node_n_channels = 1
+        self.node_device_in = audiobox_in
+        self.node_n_channels = 2
         self.node_device_out = sonywh_out
 
         self.feeder = Feeder(self.node_n_channels, self.bsize)
@@ -44,7 +44,8 @@ class Bro:
         self.moniotors.set_follow_value(0)
 
         self.filter = signal.butter(3, (50, 2000), 'bandpass', fs=self.fs)
-        self.zi = np.stack([signal.lfilter_zi(*self.filter)], axis=-1)
+        self.zi = np.stack([signal.lfilter_zi(*self.filter)]
+                           * self.node_n_channels, axis=-1)
 
         self.start_time = time.time()
 
@@ -76,10 +77,10 @@ class Bro:
         pent = np.array([1, 32/27, 4/3, 3/2, 16/9, 2])
         pent = np.concatenate([pent[:-1]/2, pent])
         self.valid_tones = np.array([
-            [440, 440*1.618]
+            [440, 440*1.618],
+            [320, 160],
         ])
         self.valid_pattern_len = (self.fs/self.valid_tones).astype(int)
-        # self.
         self.current_tones = [i[0] for i in self.valid_pattern_len]
 
         self.shift_rate = 1
@@ -97,33 +98,40 @@ class Bro:
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
-
+        # indata[:] = np.sin(np.linspace(
+        #     0, self.bsize/self.fs, self.bsize)*2*np.pi*400)[:, None]
         mean_squared = 2*np.maximum(np.mean(indata**2, axis=0), 0.001)[None, :]
         self.show_input_volue(mean_squared)
-        indata[:] = np.where(mean_squared > 0.01, indata/mean_squared, 0)
 
+        indata[:] = np.where(mean_squared > 0.01, indata/mean_squared, 0)
         current_tones = self.get_current_tones()
-        # current_tones = self.valid_pattern_len
+        current_tones = self.valid_pattern_len
+        current_tones = None
         sound = self.feeder.step(
             indata, alpha=0.05, fixed_lengts=current_tones)
 
         sound = self.handle_controlled_sine(sound)
-
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
                 * self.ft.main_volume.value).astype(np.float32)
         sound *= gain
-        for channel in range(self.node_n_channels):
-            low = self.ft.get_node_filter_low(channel)
-            high = self.ft.get_node_filter_high(channel)
-            sound, self.zi[:] = signal.lfilter(
-                *signal.butter(3, (low, high), 'bandpass', fs=self.fs),
-                sound,
-                axis=0, zi=self.zi)
-        outdata[:] = sound[:, 0:1]
+        sound = self.out_filter(sound)
+
+        # print(np.amax(sound[:, 0:2]))
+        outdata[:] = sound[:, 0:2]
 
         self.show_output_volue(outdata)
         self.tlog.append([t0, time.time()])
         self.tlog.pop(0)
+
+    def out_filter(self, sound):
+        for channel in range(self.node_n_channels):
+            low = self.ft.get_node_filter_low(channel)
+            high = self.ft.get_node_filter_high(channel)
+            sound[:, channel], self.zi[:, channel] = signal.lfilter(
+                *signal.butter(3, (low, high), 'bandpass', fs=self.fs),
+                sound[:, channel],
+                axis=0, zi=self.zi[:, channel])
+        return sound
 
     def get_current_tones(self):
         for i in range(self.node_n_channels):
