@@ -8,7 +8,7 @@ import time
 import logging
 
 
-def toggle_state(self: Encoder, ts):
+def toggle_2_state(self: Encoder, ts):
     self.set_state(self._state ^ 1)
     self.set_color(ft_colors.red if self._state else self._default_color)
 
@@ -29,6 +29,11 @@ def set_filter_high(self: Encoder, ts):
     logging.info(self.get_property('freq_high'))
 
 
+def set_controlled_pitch(self: Encoder, ts):
+    self.set_property('controlled_pitch', 20+np.exp(self.value*np.log(19980)))
+    logging.info(self.get_property('controlled_pitch'))
+
+
 class FtBro(FtBroBackend):
     def __init__(self):
         super().__init__()
@@ -37,14 +42,13 @@ class FtBro(FtBroBackend):
 
             params = node.get_property('params')
 
-            params[0, 3].register_cb_press(toggle_state)
+            params[0, 3].register_cb_press(toggle_2_state)
 
-            params[0, 3].set_property('mode', 0)
-
-            params[1, 3].register_cb_hold(toggle_state)
-            params[1, 3].set_property('mode', 0)
-            params[1, 3].register_cb_click(toggle_signal_shape)
+            params[1, 3].register_cb_hold(toggle_2_state)
+            params[1, 3].register_cb_press(toggle_signal_shape)
+            params[1, 3].register_cb_encoder(set_controlled_pitch)
             params[1, 3].set_property('sigshape', 0)
+            set_controlled_pitch(params[1, 3], None)
 
             params[0, 0].register_cb_encoder(set_filter_low)
             params[0, 0].set_property('freq_low', 0)
@@ -62,10 +66,10 @@ class FtBro(FtBroBackend):
         return [enc._state, mean_duration, enc.value]
 
     def get_contolled_tone(self, node_idx):
-        enc = self.nodes.ravel()[node_idx].get_property('params')[1, 3]
-        mode = enc._state * (enc.get_property('sigshape') + 1)
-        tone = 50+np.exp(enc.value*np.log(9950))
-        return [mode, tone]
+        param = self.nodes.ravel()[node_idx].get_property('params')[1, 3]
+        mode = param._state
+        tone = param.get_property('controlled_pitch')
+        return [mode, param.get_property('sigshape'), tone]
 
     def get_node_values(self, i):
         node = self.nodes[np.unravel_index(i, self.nodes.shape)]

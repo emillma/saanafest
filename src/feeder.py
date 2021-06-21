@@ -8,18 +8,22 @@ class Feeder:
     def __init__(self, channels=2, bsize=2048, fs=48000):
         self.bsize = bsize
         self.fs = fs
-        self.tape_length = 4
+        self.tape_length = (4*fs//self.bsize)*self.bsize
         self.tape = np.zeros(
-            (self.tape_length*fs, channels)).astype(np.float32)
+            (self.tape_length, channels)).astype(np.float32)
+        self.gains = 0.001 * np.ones(self.tape_length//self.bsize, np.float32)
         self.ramp = 1
 
-        self.gain_pattern = np.ones(self.tape.shape[0])
-        self.gain_pattern[:self.bsize] *= np.linspace(0, 1, self.bsize)
+        self.gain_ramp_up = np.linspace(0, 1, self.bsize).astype(np.float32)
 
     def step(self, block, alpha=0.01, fixed_lengts=None):
-        self.tape = np.pad(self.tape, ((0, self.bsize), (0, 0)))[self.bsize:]
+        self.tape = np.roll(self.tape, -self.bsize, axis=0)
+        self.tape[-self.bsize:] = 0
+        self.gains = np.roll(self.gains, -1, axis=0)
+        self.gains[-1] = 1
+
         block = block.astype(np.float32)
-        patterns, lengths = get_patterns(block, 100, 1000, 4)
+        patterns, lengths = get_patterns(block, 100, 1000, 8)
         for channel in range(block.shape[1]):
             patten_len = lengths[channel]
             pattern = patterns[:patten_len, channel]
@@ -38,7 +42,7 @@ class Feeder:
 
             shift = forward_match(
                 self.tape[:patten_len*2, channel], pattern,
-                0, block.shape[0], 4)
+                0, block.shape[0], 8)
 
             tiled = np.tile(pattern,
                             (self.tape.shape[0]-self.bsize)//pattern.shape[0])
@@ -47,10 +51,12 @@ class Feeder:
         return self.tape[:self.bsize]
 
     def merge_in(self, shift, tiled, channel, alpha):
-        gain = self.gain_pattern[:tiled.shape[0]]*alpha
-        self.tape[shift: shift+tiled.shape[0], channel] = (
-            self.tape[shift: shift+tiled.shape[0], channel] * (1-gain)
-            + tiled * gain)
+        self.gains[:] *= (1-alpha)
+        tiled[:self.bsize] *= self.gain_ramp_up
+        tiled[:] *= (alpha
+                     / np.repeat(self.gains, self.bsize)[:tiled.shape[0]])
+        self.tape[shift: shift+tiled.shape[0], channel] += tiled
+        self.tape[:self.bsize] *= self.gains[0]
 
 
 if __name__ == '__main__':
