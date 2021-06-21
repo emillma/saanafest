@@ -103,7 +103,7 @@ class Bro:
         current_tones = self.get_current_tones()
         current_tones = None
         sound = self.feeder.step(indata, alpha, current_tones)
-        # sound *= 10
+        sound *= 10
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
                 * self.ft.main_volume.value).astype(np.float32)
         sound *= gain

@@ -11,7 +11,8 @@ class Feeder:
         self.tape_length = (4*fs//self.bsize)*self.bsize
         self.tape = np.zeros(
             (self.tape_length, channels)).astype(np.float32)
-        self.gains = 0.001 * np.ones(self.tape_length//self.bsize, np.float32)
+        self.gains = np.ones(self.tape_length//self.bsize, np.float32)
+        self.gains = np.exp(-0.01*np.arange(self.gains.size, 0, -1))
         self.ramp = 1
 
         self.gain_ramp_up = np.linspace(0, 1, self.bsize).astype(np.float32)
