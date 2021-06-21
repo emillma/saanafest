@@ -24,7 +24,7 @@ class Feeder:
         self.gains[-1] = 1
 
         block = block.astype(np.float32)
-        patterns, lengths = get_patterns(block, 100, 1000, 8)
+        patterns, lengths = get_patterns(block, 44, 1000, 8)
         for channel in range(block.shape[1]):
             patten_len = lengths[channel]
             pattern = patterns[:patten_len, channel]

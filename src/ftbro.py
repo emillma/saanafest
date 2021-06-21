@@ -20,17 +20,17 @@ def toggle_signal_shape(self: Encoder, ts):
 
 
 def set_filter_low(self: Encoder, ts):
-    self.set_property('freq_low', 20 + np.exp(self.value*np.log(19800)))
+    self.set_property('freq_low', 20 * np.exp(self.value*np.log(1000)))
     logging.info(self.get_property('freq_low'))
 
 
 def set_filter_high(self: Encoder, ts):
-    self.set_property('freq_high', 20 + np.exp(self.value*np.log(19800)))
+    self.set_property('freq_high', 20 * np.exp(self.value*np.log(1000)))
     logging.info(self.get_property('freq_high'))
 
 
 def set_controlled_pitch(self: Encoder, ts):
-    self.set_property('controlled_pitch', 20+np.exp(self.value*np.log(19980)))
+    self.set_property('controlled_pitch', 20*np.exp(self.value*np.log(1000)))
     logging.info(self.get_property('controlled_pitch'))
 
 
@@ -45,7 +45,7 @@ class FtBro(FtBroBackend):
             params[0, 3].register_cb_press(toggle_2_state)
 
             params[1, 3].register_cb_hold(toggle_2_state)
-            params[1, 3].register_cb_press(toggle_signal_shape)
+            params[1, 3].register_cb_click(toggle_signal_shape)
             params[1, 3].register_cb_encoder(set_controlled_pitch)
             params[1, 3].set_property('sigshape', 0)
             set_controlled_pitch(params[1, 3], None)
