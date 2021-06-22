@@ -88,7 +88,8 @@ class Feeder:
 
         self.tape[:self.bsize, :] *= self.gains[0]
         self.gains[0] = 1
-        return self.tape[:self.bsize]
+
+        return self.tape[:self.bsize], best_node, best_len
 
     def merge_in(self, pattern, pattern_len, channel):
         shift = forward_match(

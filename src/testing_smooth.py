@@ -123,9 +123,12 @@ class Bro:
         # current_tones = None
         sound = self.feeder.step_node(
             input_node, alpha=0.05, fixed_lengts=current_tones)
-        sound = self.feeder.step_mic(
+        sound, best_node, best_len = self.feeder.step_mic(
             input_mic, alpha=0.05, fixed_lengts=self.valid_lengths)
         self.feeder.roll_tape()
+
+        self.current_lengths[best_node][:] = best_len
+        self.freq_shift_times[best_node] = _time.currentTime
 
         sound = self.handle_controlled_sine(sound)
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
