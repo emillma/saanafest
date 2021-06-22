@@ -106,18 +106,21 @@ class Bro:
         t0 = time.time()
         # indata[:] = np.sin(np.linspace(
         #     0, self.bsize/self.fs, self.bsize)*2*np.pi*400)[:, None]
+        mean_squared = np.sqrt(2 * np.mean(indata**2, axis=0)[None, :])
+        indata[:] = np.where(mean_squared > 0.01,
+                             indata/mean_squared, 0)
+
         input_node = indata[:, :self.node_n_channels]
         input_mic = indata[:, -1:]
-        input_node[:] = input_mic
-        mean_squared = np.sqrt(2 * np.mean(input_node**2, axis=0)[None, :])
+        input_node *= min(1, (1-self.ft.mic_volume.value)*2)
+        input_mic *= min(1, self.ft.mic_volume.value*2)
+
         self.show_input_volue(mean_squared)
 
-        input_node[:] = np.where(mean_squared > 0.01,
-                                 input_node/mean_squared, 0)
         current_tones = self.get_current_tones()
         # current_tones = None
-        # sound = self.feeder.step_node(
-        #     input_node, alpha=0.05, fixed_lengts=current_tones)
+        sound = self.feeder.step_node(
+            input_node, alpha=0.05, fixed_lengts=current_tones)
         sound = self.feeder.step_mic(
             input_mic, alpha=0.05, fixed_lengts=self.valid_lengths)
         self.feeder.roll_tape()

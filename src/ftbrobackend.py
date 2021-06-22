@@ -10,7 +10,7 @@ class FtBroBackend(FighterTwister):
         self.selectors = self.encoders[0, :2, :]
         self.nodes = self.selectors[:, :3]
         self.main_volume = self.selectors[0, 3]
-        self.mic = self.selectors[1, 3]
+        self.mic_volume = self.selectors[1, 3]
 
         for selector in self.selectors:
             params = EncoderCollection((2, 4), self)
@@ -27,8 +27,8 @@ class FtBroBackend(FighterTwister):
         self.main_volume.register_cb_hold(self.volume_or_mic_hold)
         self.main_volume.set_default_color(ft_colors.orange, True)
 
-        self.mic.register_cb_hold(self.volume_or_mic_hold)
-        self.mic.set_default_color(ft_colors.magenta, True)
+        self.mic_volume.register_cb_hold(self.volume_or_mic_hold)
+        self.mic_volume.set_default_color(ft_colors.magenta, True)
 
         self.button_params = self.sidebuttons[0:2, 0, 0]
         self.button_inspect = self.sidebuttons[0:2, 1, 0]
