@@ -85,9 +85,9 @@ class Bro:
             [180, 440],
             [320, 160],
         ]]
-        self.valid_pattern_len = [np.round(self.fs/tones).astype(int)
-                                  for tones in self.valid_tones]
-        self.current_lengths = [i[0:1] for i in self.valid_pattern_len]
+        self.valid_lengths = [np.round(self.fs/tones).astype(int)
+                              for tones in self.valid_tones]
+        self.current_lengths = [i[0:1] for i in self.valid_lengths]
 
         self.shift_rate = 1
         self.sine_times = np.zeros(self.node_n_channels)
@@ -106,17 +106,20 @@ class Bro:
         t0 = time.time()
         # indata[:] = np.sin(np.linspace(
         #     0, self.bsize/self.fs, self.bsize)*2*np.pi*400)[:, None]
-        node_in = indata[:, :self.node_n_channels]
-        mic_input = indata[:, self.node_n_channels]
-        node_in[:] = mic_input[:, None]
-        mean_squared = np.sqrt(2 * np.mean(node_in**2, axis=0)[None, :])
+        input_node = indata[:, :self.node_n_channels]
+        input_mic = indata[:, -1:]
+        input_node[:] = input_mic
+        mean_squared = np.sqrt(2 * np.mean(input_node**2, axis=0)[None, :])
         self.show_input_volue(mean_squared)
 
-        node_in[:] = np.where(mean_squared > 0.01, node_in/mean_squared, 0)
+        input_node[:] = np.where(mean_squared > 0.01,
+                                 input_node/mean_squared, 0)
         current_tones = self.get_current_tones()
         # current_tones = None
-        sound = self.feeder.step_node(
-            node_in, alpha=0.02, fixed_lengts=current_tones)
+        # sound = self.feeder.step_node(
+        #     input_node, alpha=0.05, fixed_lengts=current_tones)
+        sound = self.feeder.step_mic(
+            input_mic, alpha=0.05, fixed_lengts=self.valid_lengths)
         self.feeder.roll_tape()
 
         sound = self.handle_controlled_sine(sound)
@@ -150,14 +153,14 @@ class Bro:
                 prob = 1-np.exp(-self.bsize/(self.fs*mean_duration))
                 if np.random.random() < prob:
                     self.current_lengths[i] = np.random.choice(
-                        [length for length in self.valid_pattern_len[i]
+                        [length for length in self.valid_lengths[i]
                          if length != self.current_lengths[i]],
                         size=1)
                     self.ft.nodes.ravel()[i].get_property(
                         'params')[0, 3].flash_color(ft_colors.blue)
             else:
-                self.current_lengths[i] = self.valid_pattern_len[i:i+1][
-                    round(to_range(value, 0, len(self.valid_tones[i])-1))]
+                idx = round(to_range(value, 0, len(self.valid_tones[i])-1))
+                self.current_lengths[i] = self.valid_lengths[i][idx:idx+1]
         return self.current_lengths
 
     def handle_controlled_sine(self, sound):
