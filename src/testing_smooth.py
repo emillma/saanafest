@@ -87,20 +87,20 @@ class Bro:
         ]]
         self.valid_pattern_len = [np.round(self.fs/tones).astype(int)
                                   for tones in self.valid_tones]
-        self.current_lengths = [i[0] for i in self.valid_pattern_len]
+        self.current_lengths = [i[0:1] for i in self.valid_pattern_len]
 
         self.shift_rate = 1
         self.sine_times = np.zeros(self.node_n_channels)
 
         self.tlog = [[time.time(), time.time()]*2]
-        # self.cb_node(
-        #     np.zeros(
-        #         (self.bsize, self.node_n_channels+1), np.float32),
-        #     np.empty((self.bsize, self.node_n_channels), np.float32),
-        #     None,
-        #     None,
-        #     None
-        # )
+        self.cb_node(
+            np.zeros(
+                (self.bsize, self.node_n_channels+1), np.float32),
+            np.empty((self.bsize, self.node_n_channels), np.float32),
+            None,
+            None,
+            None
+        )
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
@@ -117,6 +117,7 @@ class Bro:
         # current_tones = None
         sound = self.feeder.step_node(
             node_in, alpha=0.02, fixed_lengts=current_tones)
+        self.feeder.roll_tape()
 
         sound = self.handle_controlled_sine(sound)
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
@@ -150,12 +151,12 @@ class Bro:
                 if np.random.random() < prob:
                     self.current_lengths[i] = np.random.choice(
                         [length for length in self.valid_pattern_len[i]
-                         if length != self.current_lengths[i]])
+                         if length != self.current_lengths[i]],
+                        size=1)
                     self.ft.nodes.ravel()[i].get_property(
                         'params')[0, 3].flash_color(ft_colors.blue)
-                    # self.ft.encoder_slots[0, 2, 3].flash_color(ft_colors.blue)
             else:
-                self.current_lengths[i] = self.valid_pattern_len[i][
+                self.current_lengths[i] = self.valid_pattern_len[i:i+1][
                     round(to_range(value, 0, len(self.valid_tones[i])-1))]
         return self.current_lengths
 

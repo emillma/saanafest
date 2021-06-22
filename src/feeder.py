@@ -42,11 +42,8 @@ class Feeder:
 
             if fixed_lengts is not None:
                 fl = fixed_lengts[channel]
-                if isinstance(fl, np.ndarray):
-                    fl_closest = fl[np.argmin(
-                        np.abs(np.log2(fl)-np.log2(pattern_len)))]
-                else:
-                    fl_closest = fl
+                fl_closest = fl[np.argmin(
+                    np.abs(np.log2(fl)-np.log2(pattern_len)))]
                 iterp = interp1d(np.linspace(0, 1, pattern_len), pattern,
                                  assume_sorted=True)
                 pattern = iterp(np.linspace(0, 1, fl_closest))
@@ -57,30 +54,30 @@ class Feeder:
         return self.tape[:self.bsize]
 
     def step_mic(self, block, alpha=0.01, fixed_lengts=None):
+        assert block.shape[1] == 1
         block = block.astype(np.float32)
         patterns, lengths = get_patterns(block, 44, 1000, 8)
 
         self.mic_gains *= (1-alpha)
         self.mic_gains_repeated[:] = np.repeat(alpha/self.mic_gains,
                                                self.bsize)
-        for channel in range(block.shape[1]):
-            pattern_len = lengths[channel]
-            pattern = patterns[:pattern_len, channel]
+        pattern_len = lengths[0]
+        pattern = patterns[:pattern_len, 0]
 
-            if fixed_lengts is not None:
+        if fixed_lengts is not None:
+            best_diff = np.inf
+            for channel in range(self.tape.shape[1]):
                 fl = fixed_lengts[channel]
-                if isinstance(fl, np.ndarray):
-                    fl_closest = fl[np.argmin(
-                        np.abs(np.log2(fl)-np.log2(pattern_len)))]
-                else:
-                    fl_closest = fl
-                iterp = interp1d(np.linspace(0, 1, pattern_len), pattern,
-                                 assume_sorted=True)
-                pattern = iterp(np.linspace(0, 1, fl_closest))
-                pattern = pattern.astype(np.float32)
+                fl_closest = fl[np.argmin(
+                    np.abs(np.log2(fl)-np.log2(pattern_len)))]
 
-            self.merge_in(pattern, pattern_len, channel,
-                          self.node_gains_repeated)
+        iterp = interp1d(np.linspace(0, 1, pattern_len), pattern,
+                         assume_sorted=True)
+        pattern = iterp(np.linspace(0, 1, fl_closest))
+        pattern = pattern.astype(np.float32)
+
+        self.merge_in(pattern, pattern_len, channel,
+                      self.mic_gains_repeated)
         return self.tape[:self.bsize]
 
     def merge_in(self, pattern, pattern_len, channel, gains_repeated):
