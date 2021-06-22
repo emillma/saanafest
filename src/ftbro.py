@@ -117,8 +117,6 @@ class FtBro(FtBroBackend):
                     param = params[int(key[-2:])]
                     param_dir = value
                     for key, value in param_dir.items():
-                        if key == '_color' and value == ft_colors.red:
-                            a = 1
                         getattr(param, f'set{key}')(value)
 
     def get_node_filter_low(self, node):
