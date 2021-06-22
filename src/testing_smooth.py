@@ -77,11 +77,11 @@ class Bro:
         pent = np.array([1, 32/27, 4/3, 3/2, 16/9, 2])
         pent = np.concatenate([pent[:-1]/2, pent])
         self.valid_tones = np.array([
-            [440, 440*1.618],
+            [180, 440],
             [320, 160],
         ])
         self.valid_pattern_len = (self.fs/self.valid_tones).astype(int)
-        self.current_tones = [i[0] for i in self.valid_pattern_len]
+        self.current_lengths = [i[0] for i in self.valid_pattern_len]
 
         self.shift_rate = 1
         self.sine_times = np.zeros(self.node_n_channels)
@@ -105,8 +105,8 @@ class Bro:
 
         indata[:] = np.where(mean_squared > 0.01, indata/mean_squared, 0)
         current_tones = self.get_current_tones()
-        current_tones = self.valid_pattern_len
-        current_tones = None
+        # current_tones = self.valid_pattern_len
+        # current_tones = None
         sound = self.feeder.step(
             indata, alpha=0.05, fixed_lengts=current_tones)
 
@@ -140,15 +140,16 @@ class Bro:
 
                 prob = 1-np.exp(-self.bsize/(self.fs*mean_duration))
                 if np.random.random() < prob:
-                    self.current_tones[i] = np.random.choice(
-                        self.valid_pattern_len[i])
+                    self.current_lengths[i] = np.random.choice(
+                        [length for length in self.valid_pattern_len[i]
+                         if length != self.current_lengths[i]])
                     self.ft.nodes.ravel()[i].get_property(
                         'params')[0, 3].flash_color(ft_colors.blue)
                     # self.ft.encoder_slots[0, 2, 3].flash_color(ft_colors.blue)
             else:
-                self.current_tones[i] = self.valid_pattern_len[i][
+                self.current_lengths[i] = self.valid_pattern_len[i][
                     round(to_range(value, 0, len(self.valid_tones[i])-1))]
-        return self.current_tones
+        return self.current_lengths
 
     def handle_controlled_sine(self, sound):
         for i in range(self.node_n_channels):
