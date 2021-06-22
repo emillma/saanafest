@@ -21,6 +21,7 @@ pc_in = 'Microphone Array (Realtek High '
 pc_out = 'Speakers (Realtek High Definiti, MME'
 
 sonywh_out = 'Headphones (WH-1000XM2 Stereo), MME'
+asio = 'ASIO4ALL v2, ASIO'
 
 
 class Bro:
@@ -30,9 +31,9 @@ class Bro:
         self.mic_device_in = mch_in
         self.mic_channels_in = 1
 
-        self.node_device_in = audiobox_in
+        self.node_device_in = asio
         self.node_n_channels = 2
-        self.node_device_out = sonywh_out
+        self.node_device_out = asio
 
         self.feeder = Feeder(self.node_n_channels, self.bsize)
         self.ft = FtBro()
@@ -64,51 +65,58 @@ class Bro:
         #     latency='low',
         #     callback=self.cb_mic)
 
+        ca_in = sd.AsioSettings(channel_selectors=[1, 2, 0])
+        ca_out = sd.AsioSettings(channel_selectors=[0, 1, 2])
+
         self.sd_stream_nodes = sd.Stream(
             samplerate=self.fs,
             blocksize=self.bsize,
             device=(self.node_device_in,
                     self.node_device_out),
-            channels=(self.node_n_channels,
+            channels=(self.node_n_channels+1,
                       self.node_n_channels),
             dtype=np.float32,
             latency='low',
+            extra_settings=(ca_in, ca_out),
             callback=self.cb_node)
         pent = np.array([1, 32/27, 4/3, 3/2, 16/9, 2])
         pent = np.concatenate([pent[:-1]/2, pent])
-        self.valid_tones = np.array([
+        self.valid_tones = [np.array(tones) for tones in [
             [180, 440],
             [320, 160],
-        ])
-        self.valid_pattern_len = (self.fs/self.valid_tones).astype(int)
+        ]]
+        self.valid_pattern_len = [np.round(self.fs/tones).astype(int)
+                                  for tones in self.valid_tones]
         self.current_lengths = [i[0] for i in self.valid_pattern_len]
 
         self.shift_rate = 1
         self.sine_times = np.zeros(self.node_n_channels)
 
         self.tlog = [[time.time(), time.time()]*2]
-        self.cb_node(
-            np.zeros(
-                (self.bsize, self.node_n_channels), np.float32),
-            np.empty((self.bsize, self.node_n_channels), np.float32),
-            None,
-            None,
-            None
-        )
+        # self.cb_node(
+        #     np.zeros(
+        #         (self.bsize, self.node_n_channels+1), np.float32),
+        #     np.empty((self.bsize, self.node_n_channels), np.float32),
+        #     None,
+        #     None,
+        #     None
+        # )
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
         # indata[:] = np.sin(np.linspace(
         #     0, self.bsize/self.fs, self.bsize)*2*np.pi*400)[:, None]
-        mean_squared = 2*np.maximum(np.mean(indata**2, axis=0), 0.001)[None, :]
+        node_in = indata[:, :self.node_n_channels]
+        mic_input = indata[:, self.node_n_channels]
+        node_in[:] = mic_input[:, None]
+        mean_squared = np.sqrt(2 * np.mean(node_in**2, axis=0)[None, :])
         self.show_input_volue(mean_squared)
 
-        indata[:] = np.where(mean_squared > 0.01, indata/mean_squared, 0)
+        node_in[:] = np.where(mean_squared > 0.01, node_in/mean_squared, 0)
         current_tones = self.get_current_tones()
-        # current_tones = self.valid_pattern_len
         # current_tones = None
-        sound = self.feeder.step(
-            indata, alpha=0.05, fixed_lengts=current_tones)
+        sound = self.feeder.step_node(
+            node_in, alpha=0.02, fixed_lengts=current_tones)
 
         sound = self.handle_controlled_sine(sound)
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
