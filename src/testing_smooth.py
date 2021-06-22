@@ -32,7 +32,7 @@ class Bro:
         self.mic_channels_in = 1
 
         self.node_device_in = asio
-        self.node_n_channels = 2
+        self.node_n_channels = 4
         self.node_device_out = asio
 
         self.feeder = Feeder(self.node_n_channels, self.bsize)
@@ -49,11 +49,13 @@ class Bro:
                            * self.node_n_channels, axis=-1)
 
         self.start_time = time.time()
+        self.freq_shift_times = np.zeros(self.node_n_channels)
 
         def repeat_foo():
-            print((self.tlog[-1][1]-self.tlog[-1][0])/(self.bsize/self.fs))
+            # print((self.tlog[-1][1]-self.tlog[-1][0])/(self.bsize/self.fs))
             self.ft.save()
-            self.ft.do_task_delay(1000, repeat_foo)
+            # print(self.sd_stream_nodes.cpu_load)
+            self.ft.do_task_delay(5000, repeat_foo)
         self.repeat_foo = repeat_foo
 
         # self.sd_stream_mic = sd.InputStream(
@@ -65,8 +67,8 @@ class Bro:
         #     latency='low',
         #     callback=self.cb_mic)
 
-        ca_in = sd.AsioSettings(channel_selectors=[1, 2, 0])
-        ca_out = sd.AsioSettings(channel_selectors=[0, 1, 2])
+        ca_in = sd.AsioSettings(channel_selectors=[1, 0])
+        ca_out = sd.AsioSettings(channel_selectors=[0, 1])
 
         self.sd_stream_nodes = sd.Stream(
             samplerate=self.fs,
@@ -77,14 +79,15 @@ class Bro:
                       self.node_n_channels),
             dtype=np.float32,
             latency='low',
-            extra_settings=(ca_in, ca_out),
+            # extra_settings=(ca_in, ca_out),
             callback=self.cb_node)
-        pent = np.array([1, 32/27, 4/3, 3/2, 16/9, 2])
-        pent = np.concatenate([pent[:-1]/2, pent])
+
         self.valid_tones = [np.array(tones) for tones in [
-            [180, 440],
+            [128.6, 179.6, 215.2, 252.4, 271.4, 296, 380, 502.5, 562.2, 598],
             [320, 160],
-        ]]
+            [320, 160],
+            [320, 160],
+        ]][:self.node_n_channels]
         self.valid_lengths = [np.round(self.fs/tones).astype(int)
                               for tones in self.valid_tones]
         self.current_lengths = [i[0:1] for i in self.valid_lengths]
@@ -93,14 +96,14 @@ class Bro:
         self.sine_times = np.zeros(self.node_n_channels)
 
         self.tlog = [[time.time(), time.time()]*2]
-        self.cb_node(
-            np.zeros(
-                (self.bsize, self.node_n_channels+1), np.float32),
-            np.empty((self.bsize, self.node_n_channels), np.float32),
-            None,
-            None,
-            None
-        )
+        # self.cb_node(
+        #     np.zeros(
+        #         (self.bsize, self.node_n_channels+1), np.float32),
+        #     np.empty((self.bsize, self.node_n_channels), np.float32),
+        #     None,
+        #     time.time(),
+        #     None
+        # )
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
@@ -114,10 +117,9 @@ class Bro:
         input_mic = indata[:, -1:]
         input_node *= min(1, (1-self.ft.mic_volume.value)*2)
         input_mic *= min(1, self.ft.mic_volume.value*2)
-
         self.show_input_volue(mean_squared)
 
-        current_tones = self.get_current_tones()
+        current_tones = self.get_current_tones(_time.currentTime)
         # current_tones = None
         sound = self.feeder.step_node(
             input_node, alpha=0.05, fixed_lengts=current_tones)
@@ -132,7 +134,7 @@ class Bro:
         sound = self.out_filter(sound)
 
         # print(np.amax(sound[:, 0:2]))
-        outdata[:] = sound[:, 0:2]
+        outdata[:] = sound
 
         self.show_output_volue(outdata)
         self.tlog.append([t0, time.time()])
@@ -148,12 +150,13 @@ class Bro:
                 axis=0, zi=self.zi[:, channel])
         return sound
 
-    def get_current_tones(self):
+    def get_current_tones(self, now):
         for i in range(self.node_n_channels):
             shift_mode, mean_duration, value = self.ft.get_shift_rate(i)
             if shift_mode == 0:
-
-                prob = 1-np.exp(-self.bsize/(self.fs*mean_duration))
+                if now - self.freq_shift_times[i] < mean_duration/2:
+                    continue
+                prob = 1-np.exp(-self.bsize/(self.fs*mean_duration/2))
                 if np.random.random() < prob:
                     self.current_lengths[i] = np.random.choice(
                         [length for length in self.valid_lengths[i]
@@ -161,6 +164,7 @@ class Bro:
                         size=1)
                     self.ft.nodes.ravel()[i].get_property(
                         'params')[0, 3].flash_color(ft_colors.blue)
+                    self.freq_shift_times[i] = now
             else:
                 idx = round(to_range(value, 0, len(self.valid_tones[i])-1))
                 self.current_lengths[i] = self.valid_lengths[i][idx:idx+1]

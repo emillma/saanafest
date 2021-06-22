@@ -61,7 +61,7 @@ class Feeder:
     def step_mic(self, block, alpha=0.01, fixed_lengts=None):
         assert block.shape[1] == 1
         block = block.astype(np.float32)
-        patterns, lengths = get_patterns(block, 44, 1000, 8)
+        patterns, lengths = get_patterns(block, 44, 1000, 4)
 
         self.gains *= (1-alpha)
         self.inverted_gains_repeated[:] = np.repeat(alpha/self.gains,
@@ -93,7 +93,7 @@ class Feeder:
     def merge_in(self, pattern, pattern_len, channel):
         shift = forward_match(
             self.tape[:pattern_len*2, channel], pattern,
-            0, self.bsize, 8)
+            0, self.bsize, 4)
         tiled = np.tile(pattern,
                         (self.tape.shape[0]-self.bsize)//pattern.shape[0])
         tiled[:self.bsize] *= self.gain_ramp_up

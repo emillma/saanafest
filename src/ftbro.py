@@ -20,17 +20,18 @@ def toggle_signal_shape(self: Encoder, ts):
 
 
 def set_filter_low(self: Encoder, ts):
-    self.set_property('freq_low', 20 * np.exp(self.value*np.log(1000)))
+    self.set_property('freq_low', 80 * np.exp(self.value*np.log(3000/80)))
     logging.info(self.get_property('freq_low'))
 
 
 def set_filter_high(self: Encoder, ts):
-    self.set_property('freq_high', 20 * np.exp(self.value*np.log(1000)))
+    self.set_property('freq_high', 80 * np.exp(self.value*np.log(3000/80)))
     logging.info(self.get_property('freq_high'))
 
 
 def set_controlled_pitch(self: Encoder, ts):
-    self.set_property('controlled_pitch', 20*np.exp(self.value*np.log(1000)))
+    self.set_property('controlled_pitch', 80 *
+                      np.exp(self.value*np.log(3000/80)))
     logging.info(self.get_property('controlled_pitch'))
 
 
