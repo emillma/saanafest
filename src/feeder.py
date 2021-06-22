@@ -11,56 +11,89 @@ class Feeder:
         self.tape_length = (4*fs//self.bsize)*self.bsize
         self.tape = np.zeros(
             (self.tape_length, channels)).astype(np.float32)
-        self.gains = np.exp(-0.01 * np.arange(self.tape_length//self.bsize,
-                                              0, -1)).astype(np.float32)
-        self.gains_repeated = np.empty(self.tape_length, np.float32)
+
+        self.node_gains = np.exp(-0.01*np.arange(self.tape_length//self.bsize,
+                                                 0, -1)).astype(np.float32)
+        self.mic_gains = self.node_gains.copy()
+
+        self.node_gains_repeated = np.empty(self.tape_length, np.float32)
+        self.mic_gains_repeated = self.node_gains_repeated.copy()
         self.ramp = 1
 
         self.gain_ramp_up = np.linspace(0, 1, self.bsize).astype(np.float32)
 
-    def step(self, block, alpha=0.01, fixed_lengts=None):
+    def roll_tape(self):
         self.tape = np.roll(self.tape, -self.bsize, axis=0)
         self.tape[-self.bsize:] = 0
-        self.gains = np.roll(self.gains, -1, axis=0)
-        self.gains[-1] = 1
+        self.node_gains = np.roll(self.node_gains, -1, axis=0)
+        self.node_gains[-1] = 1
 
+    def step_node(self, block, alpha=0.01, fixed_lengts=None):
         block = block.astype(np.float32)
         patterns, lengths = get_patterns(block, 44, 1000, 8)
 
-        self.gains *= (1-alpha)
-        self.gains_repeated[:] = np.repeat(alpha/self.gains,
-                                           self.bsize)
+        self.node_gains *= (1-alpha)
+        self.node_gains_repeated[:] = np.repeat(alpha/self.node_gains,
+                                                self.bsize)
+
         for channel in range(block.shape[1]):
-            patten_len = lengths[channel]
-            pattern = patterns[:patten_len, channel]
+            pattern_len = lengths[channel]
+            pattern = patterns[:pattern_len, channel]
+
             if fixed_lengts is not None:
                 fl = fixed_lengts[channel]
                 if isinstance(fl, np.ndarray):
                     fl_closest = fl[np.argmin(
-                        np.abs(np.log2(fl)-np.log2(patten_len)))]
+                        np.abs(np.log2(fl)-np.log2(pattern_len)))]
                 else:
                     fl_closest = fl
-                # TODO if closer than threashold, dont shift
-                iterp = interp1d(np.linspace(0, 1, patten_len), pattern,
+                iterp = interp1d(np.linspace(0, 1, pattern_len), pattern,
                                  assume_sorted=True)
                 pattern = iterp(np.linspace(0, 1, fl_closest))
                 pattern = pattern.astype(np.float32)
 
-            shift = forward_match(
-                self.tape[:patten_len*2, channel], pattern,
-                0, block.shape[0], 8)
-
-            tiled = np.tile(pattern,
-                            (self.tape.shape[0]-self.bsize)//pattern.shape[0])
-            self.merge_in(shift, tiled, channel, alpha)
-            pass
+            self.merge_in(pattern, pattern_len, channel,
+                          self.node_gains_repeated)
         return self.tape[:self.bsize]
 
-    def merge_in(self, shift, tiled, channel, alpha):
+    def step_mic(self, block, alpha=0.01, fixed_lengts=None):
+        block = block.astype(np.float32)
+        patterns, lengths = get_patterns(block, 44, 1000, 8)
+
+        self.mic_gains *= (1-alpha)
+        self.mic_gains_repeated[:] = np.repeat(alpha/self.mic_gains,
+                                               self.bsize)
+        for channel in range(block.shape[1]):
+            pattern_len = lengths[channel]
+            pattern = patterns[:pattern_len, channel]
+
+            if fixed_lengts is not None:
+                fl = fixed_lengts[channel]
+                if isinstance(fl, np.ndarray):
+                    fl_closest = fl[np.argmin(
+                        np.abs(np.log2(fl)-np.log2(pattern_len)))]
+                else:
+                    fl_closest = fl
+                iterp = interp1d(np.linspace(0, 1, pattern_len), pattern,
+                                 assume_sorted=True)
+                pattern = iterp(np.linspace(0, 1, fl_closest))
+                pattern = pattern.astype(np.float32)
+
+            self.merge_in(pattern, pattern_len, channel,
+                          self.node_gains_repeated)
+        return self.tape[:self.bsize]
+
+    def merge_in(self, pattern, pattern_len, channel, gains_repeated):
+        shift = forward_match(
+            self.tape[:pattern_len*2, channel], pattern,
+            0, self.bsize, 8)
+        tiled = np.tile(pattern,
+                        (self.tape.shape[0]-self.bsize)//pattern.shape[0])
         tiled[:self.bsize] *= self.gain_ramp_up
-        tiled[:] *= self.gains_repeated[:tiled.shape[0]]
+        tiled[:] *= gains_repeated[:tiled.shape[0]]
         self.tape[shift: shift+tiled.shape[0], channel] += tiled
-        self.tape[:self.bsize, channel] *= self.gains[0]
+        self.tape[:self.bsize, channel] *= gains_repeated[0]
+        return self.tape[:self.bsize]
 
 
 if __name__ == '__main__':
@@ -76,7 +109,7 @@ if __name__ == '__main__':
     t0 = time.time()
     for i in range(0, data.shape[0], bsize):
         block = data[i:i+bsize]
-        parts.append(emil.step(block, alpha=0.001))
+        parts.append(emil.step_node(block, alpha=0.001))
     out = np.vstack(parts)
     out /= np.amax(np.abs(out))
     print(time.time()-t0)
