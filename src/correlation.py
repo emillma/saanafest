@@ -26,6 +26,10 @@ def correlate_single(arr0, arr1, shift, step=1):
           'int64(float32[:], float32[:], int64, int64, int64)'],
          cache=True, parallel=False)
 def forward_match(arr0, arr1, min_shift, max_shift, rough_step):
+    """ a = np.array([0,0,0,0,1,0,0], np.float32)
+        b = np.array([0,0,1,0,0,0,0], np.float32)
+        shift = forward_match(a,b, 0, 10, 1)
+        np.allclose(a[shift:], b[:-shift])"""
     correlation_vals = np.zeros(max_shift - min_shift, arr0.dtype)
 
     for i in nb.prange((max_shift - min_shift)//rough_step):
