@@ -52,20 +52,11 @@ class Bro:
         self.freq_shift_times = np.zeros(self.node_n_channels)
 
         def repeat_foo():
-            # print((self.tlog[-1][1]-self.tlog[-1][0])/(self.bsize/self.fs))
             self.ft.save()
             # print(self.sd_stream_nodes.cpu_load)
+            print(self.ft.get_alphas())
             self.ft.do_task_delay(5000, repeat_foo)
         self.repeat_foo = repeat_foo
-
-        # self.sd_stream_mic = sd.InputStream(
-        #     samplerate=self.fs,
-        #     blocksize=self.bsize,
-        #     device=self.mic_device_in,
-        #     channels=self.mic_channels_in,
-        #     dtype=np.float32,
-        #     latency='low',
-        #     callback=self.cb_mic)
 
         ca_in = sd.AsioSettings(channel_selectors=[1, 0])
         ca_out = sd.AsioSettings(channel_selectors=[0, 1])
@@ -108,15 +99,13 @@ class Bro:
 
     def cb_node(self, indata, outdata, _frames, _time, _status):
         t0 = time.time()
-        # indata[:] = np.sin(np.linspace(
-        #     0, self.bsize/self.fs, self.bsize)*2*np.pi*400)[:, None]
 
         input_node = indata[:, :self.node_n_channels]
         input_mic = indata[:, -1:]
 
         def rms(x): return np.sqrt(2 * np.mean(x**2, axis=0)[None, :])
-        mean_squared_node = rms(input_node)
-        mean_squared_mic = rms(input_mic)
+        mean_squared_node = np.maximum(rms(input_node), 0.001)
+        mean_squared_mic = np.maximum(rms(input_mic), 0.001)
 
         input_node[:] = np.where(mean_squared_node > 0.1,
                                  input_node/mean_squared_node, 0)
@@ -124,14 +113,15 @@ class Bro:
         input_mic[:] = np.where(mean_squared_mic > 0.1,
                                 input_mic/mean_squared_mic, 0)
 
-        input_node *= min(1, (1-self.ft.mic_volume.value)*2)
-        input_mic *= min(1, self.ft.mic_volume.value*2)
+        input_node *= min(1, (1-self.ft.mic_volume.value)*3)
+        input_mic *= min(1, self.ft.mic_volume.value*3)
 
         self.show_input_node(mean_squared_node)
         self.show_input_mic(mean_squared_node)
 
         current_tones = self.get_current_tones(_time.currentTime)
         # current_tones = None
+        alpha_node, alpha_mic = self.ft.get_alphas(self.node_n_channels)
         sound = self.feeder.step_node(
             input_node, alpha=0.02, fixed_lengts=current_tones)
         if np.any(input_mic):
@@ -182,8 +172,7 @@ class Bro:
                         or self.current_lengths[i:i+1],
                         # getto fix to solve float comparaison
                         size=1)
-                    self.ft.nodes.ravel()[i].get_property(
-                        'params')[0, 3].flash_color(ft_colors.blue)
+                    self.ft.shift_controllers[i].flash_color(ft_colors.blue)
                     self.freq_shift_times[i] = now
             else:
                 idx = round(to_range(value, 0, len(self.valid_tones[i])-1))

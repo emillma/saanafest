@@ -35,46 +35,109 @@ def set_controlled_pitch(self: Encoder, ts):
     logging.info(self.get_property('controlled_pitch'))
 
 
+def set_node_alpha(self: Encoder, ts):
+    self.set_property('node_alpha', 0.001 *
+                      np.exp(self.value*np.log(0.5/0.001)))
+    logging.info(self.get_property('node_alpha'))
+
+
+def set_mic_alpha(self: Encoder, ts):
+    self.set_property('mic_alpha', 0.001 *
+                      np.exp(self.value*np.log(0.5/0.001)))
+    logging.info(self.get_property('mic_alpha'))
+
+
 class FtBro(FtBroBackend):
     def __init__(self):
         super().__init__()
         self.load()
-        for node in self.nodes:
+        for i in range(len(self.nodes)):
 
-            params = node.get_property('params')
+            filter_low = self.filters_low[i]
+            filter_high = self.filters_high[i]
+            shift_controller = self.shift_controllers[i]
+            pitch_controller = self.pitch_controllers[i]
 
-            params[0, 3].register_cb_press(toggle_2_state)
+            shift_controller.register_cb_press(toggle_2_state)
+            pitch_controller.register_cb_hold(toggle_2_state)
 
-            params[1, 3].register_cb_hold(toggle_2_state)
-            params[1, 3].register_cb_click(toggle_signal_shape)
-            params[1, 3].register_cb_encoder(set_controlled_pitch)
-            params[1, 3].set_property('sigshape', 0)
-            set_controlled_pitch(params[1, 3], None)
+            pitch_controller.register_cb_click(toggle_signal_shape)
+            pitch_controller.register_cb_encoder(set_controlled_pitch)
+            pitch_controller.set_property('sigshape', 0)
+            set_controlled_pitch(pitch_controller, None)
 
-            params[0, 0].register_cb_encoder(set_filter_low)
-            params[0, 0].set_property('freq_low', 0)
-            set_filter_low(params[0, 0], None)
+            filter_low.register_cb_encoder(set_filter_low)
+            filter_low.set_property('freq_low', 0)
+            set_filter_low(filter_low, None)
 
-            params[1, 0].register_cb_encoder(set_filter_high)
-            params[1, 0].set_property('freq_high', 0)
-            set_filter_high(params[1, 0], None)
+            filter_high.register_cb_encoder(set_filter_high)
+            filter_high.set_property('freq_high', 0)
+            set_filter_high(filter_high, None)
+
+            # params[0, 1].register_cb_encoder(set_node_alpha)
+            # params[0, 1].set_property('node_alpha', 0)
+            # set_node_alpha(params[0, 1], None)
+
+            # params[1, 1].register_cb_encoder(set_mic_alpha)
+            # params[1, 1].set_property('node_alpha', 0)
+            # set_mic_alpha(params[1, 1], None)
 
         time.sleep(0.5)
 
+    @property
+    def node_params(self):
+        return [node.get_property('params') for node in self.nodes]
+
+    @property
+    def filters_low(self):
+        return [params[0, 0] for params in self.node_params]
+
+    @property
+    def filters_high(self):
+        return [params[1, 0] for params in self.node_params]
+
+    @property
+    def shift_controllers(self):
+        return [params[0, 1] for params in self.node_params]
+
+    @property
+    def pitch_controllers(self):
+        return [params[1, 1] for params in self.node_params]
+
     def get_shift_rate(self, node_idx):
-        enc = self.nodes.ravel()[node_idx].get_property('params')[0, 3]
-        mean_duration = to_range(enc.value, 0.1, 20)
-        return [enc._state, mean_duration, enc.value]
+        shift_controller = self.shift_controllers[node_idx]
+        mean_duration = to_range(shift_controller.value, 0.1, 20)
+        return [shift_controller._state, mean_duration, shift_controller.value]
 
     def get_contolled_tone(self, node_idx):
-        param = self.nodes.ravel()[node_idx].get_property('params')[1, 3]
-        mode = param._state
-        tone = param.get_property('controlled_pitch')
-        return [mode, param.get_property('sigshape'), tone]
+        pitch_controller = self.pitch_controllers[node_idx]
+        mode = pitch_controller._state
+        tone = pitch_controller.get_property('controlled_pitch')
+        return [mode, pitch_controller.get_property('sigshape'), tone]
+
+    def get_node_filter_low(self, node_idx):
+        filter_low = self.filters_low[node_idx]
+        return filter_low.get_property('freq_low')
+
+    def get_node_filter_high(self, node_idx):
+        filter_low = self.filters_low[node_idx]
+        filter_high = self.filters_high[node_idx]
+        return max(filter_low.get_property('freq_low') + 100,
+                   filter_high.get_property('freq_high'))
 
     def get_node_values(self, i):
         node = self.nodes[np.unravel_index(i, self.nodes.shape)]
         return node.value, node.get_property('params').value
+
+    def get_alphas(self, n=6):
+        node_alpha = np.empty(n, np.float32)
+        mic_alpha = np.empty(n, np.float32)
+        for i, node in enumerate(self.nodes.ravel()[:n]):
+            node_alpha[i] = node.get_property(
+                'params')[0, 1].get_property('node_alpha')
+            mic_alpha[i] = node.get_property(
+                'params')[1, 1].get_property('mic_alpha')
+        return node_alpha[None, :], mic_alpha
 
     def save(self, file_name=None):
         state_dict = {}
@@ -119,16 +182,6 @@ class FtBro(FtBroBackend):
                     param_dir = value
                     for key, value in param_dir.items():
                         getattr(param, f'set{key}')(value)
-
-    def get_node_filter_low(self, node):
-        param = self.nodes.ravel()[node].get_property('params')[0, 0]
-        return param.get_property('freq_low')
-
-    def get_node_filter_high(self, node):
-        param_low = self.nodes.ravel()[node].get_property('params')[0, 0]
-        param_high = self.nodes.ravel()[node].get_property('params')[1, 0]
-        return max(param_low.get_property('freq_low')+100,
-                   param_high.get_property('freq_high'))
 
 
 if __name__ == '__main__':
