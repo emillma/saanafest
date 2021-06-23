@@ -61,7 +61,7 @@ class Feeder:
     def step_mic(self, block, alpha=0.01, fixed_lengts=None):
         assert block.shape[1] == 1
         block = block.astype(np.float32)
-        patterns, lengths = get_patterns(block, 44, 1000, 4)
+        patterns, lengths = get_patterns(block, 28, 1024, 4)
 
         self.gains *= (1-alpha)
         self.inverted_gains_repeated[:] = np.repeat(alpha/self.gains,

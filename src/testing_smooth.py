@@ -32,7 +32,7 @@ class Bro:
         self.mic_channels_in = 1
 
         self.node_device_in = asio
-        self.node_n_channels = 4
+        self.node_n_channels = 2
         self.node_device_out = asio
 
         self.feeder = Feeder(self.node_n_channels, self.bsize)
@@ -96,6 +96,7 @@ class Bro:
         self.sine_times = np.zeros(self.node_n_channels)
 
         self.tlog = [[time.time(), time.time()]*2]
+        self.last_mic_time = 0
         # self.cb_node(
         #     np.zeros(
         #         (self.bsize, self.node_n_channels+1), np.float32),
@@ -109,26 +110,38 @@ class Bro:
         t0 = time.time()
         # indata[:] = np.sin(np.linspace(
         #     0, self.bsize/self.fs, self.bsize)*2*np.pi*400)[:, None]
-        mean_squared = np.sqrt(2 * np.mean(indata**2, axis=0)[None, :])
-        indata[:] = np.where(mean_squared > 0.01,
-                             indata/mean_squared, 0)
 
         input_node = indata[:, :self.node_n_channels]
         input_mic = indata[:, -1:]
+
+        def rms(x): return np.sqrt(2 * np.mean(x**2, axis=0)[None, :])
+        mean_squared_node = rms(input_node)
+        mean_squared_mic = rms(input_mic)
+
+        input_node[:] = np.where(mean_squared_node > 0.1,
+                                 input_node/mean_squared_node, 0)
+
+        input_mic[:] = np.where(mean_squared_mic > 0.1,
+                                input_mic/mean_squared_mic, 0)
+
         input_node *= min(1, (1-self.ft.mic_volume.value)*2)
         input_mic *= min(1, self.ft.mic_volume.value*2)
-        self.show_input_volue(mean_squared)
+
+        self.show_input_node(mean_squared_node)
+        self.show_input_mic(mean_squared_node)
 
         current_tones = self.get_current_tones(_time.currentTime)
         # current_tones = None
         sound = self.feeder.step_node(
-            input_node, alpha=0.05, fixed_lengts=current_tones)
-        sound, best_node, best_len = self.feeder.step_mic(
-            input_mic, alpha=0.05, fixed_lengts=self.valid_lengths)
+            input_node, alpha=0.02, fixed_lengts=current_tones)
+        if np.any(input_mic):
+            aplha_mic = 0.05
+            sound, best_node, best_len = self.feeder.step_mic(
+                input_mic, alpha=aplha_mic, fixed_lengts=self.valid_lengths)
+            self.current_lengths[best_node][:] = best_len
+            self.freq_shift_times[best_node] = _time.currentTime
+            self.last_mic_time = _time.currentTime
         self.feeder.roll_tape()
-
-        self.current_lengths[best_node][:] = best_len
-        self.freq_shift_times[best_node] = _time.currentTime
 
         sound = self.handle_controlled_sine(sound)
         gain = (self.ft.nodes.value.ravel()[None, :sound.shape[1]]
@@ -137,6 +150,8 @@ class Bro:
         sound = self.out_filter(sound)
 
         # print(np.amax(sound[:, 0:2]))
+        if self.last_mic_time < _time.currentTime - 20:
+            sound *= 0
         outdata[:] = sound
 
         self.show_output_volue(outdata)
@@ -163,7 +178,9 @@ class Bro:
                 if np.random.random() < prob:
                     self.current_lengths[i] = np.random.choice(
                         [length for length in self.valid_lengths[i]
-                         if length != self.current_lengths[i]],
+                         if length != self.current_lengths[i]]
+                        or self.current_lengths[i:i+1],
+                        # getto fix to solve float comparaison
                         size=1)
                     self.ft.nodes.ravel()[i].get_property(
                         'params')[0, 3].flash_color(ft_colors.blue)
@@ -193,10 +210,15 @@ class Bro:
         # print(indata.shape)
         self.mic_slot.set(np.random.random(indata.shape))
 
-    def show_input_volue(self, mean_squared):
+    def show_input_node(self, mean_squared):
         inputs = self.moniotors[:2, :3].ravel()
         ms = mean_squared.ravel()
         inputs[:ms.size].show_value(ms)
+
+    def show_input_mic(self, mean_squared):
+        inputs = self.moniotors[1, 3]
+        ms = mean_squared.ravel()[0]
+        inputs.show_value(ms)
 
     def show_output_volue(self, outdata):
         outputs = self.moniotors[2:, :3].ravel()
